@@ -92,16 +92,6 @@ export function normalizeMRZText(text: string): string {
 }
 
 
-export const normalizeMRZ = (lines: string[]) =>
-  lines.map((l) => {
-    let line = l.replace(/[^A-Z0-9<]/g, "");
-
-    if (line.length < 44) line = line.padEnd(44, "<");
-    if (line.length > 44) line = line.slice(0, 44);
-
-    return line;
-  });
-
 /**
  * ================================
  * Extract MRZ lines properly
@@ -115,40 +105,4 @@ export function extractMRZLines(text: string): string[] {
 
   // 🔥 always take LAST 2 (MRZ position)
   return lines.slice(-2);
-}
-
-export function repairMRZLine(line: string, index: number): string {
-  let l = line.toUpperCase();
-
-  // 🔥 Common OCR fixes
-  l = l
-    .replace(/O/g, "0")       // O → 0
-    .replace(/Q/g, "0")       // Q → 0
-    .replace(/I/g, "1")       // I → 1
-    .replace(/L/g, "1")       // L → 1 (only numeric zones benefit)
-    .replace(/Z/g, "2")       // Z → 2
-    .replace(/S/g, "5")       // S → 5
-    .replace(/B/g, "8");      // B → 8
-
-  // 🔥 Fix illegal characters
-  l = l.replace(/[^A-Z0-9<]/g, "<");
-
-  // 🔥 CRITICAL FIXES BY LINE TYPE
-  if (index === 0) {
-    // Passport line MUST start with P<
-    if (!l.startsWith("P<")) {
-      l = "P<" + l.slice(2);
-    }
-  }
-
-  if (index === 1) {
-    // Line 2 must NOT start with 0P or OP
-    l = l.replace(/^0P/, "P<");
-    l = l.replace(/^OP/, "P<");
-
-    // Document number should be alphanumeric (fix common issues)
-    l = l.replace(/</g, "<"); // keep fillers
-  }
-
-  return l;
 }

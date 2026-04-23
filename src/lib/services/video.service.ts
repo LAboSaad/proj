@@ -25,8 +25,8 @@ export async function detectFaceWithRetry(
       .detectSingleFace(
         video,
         new faceapi.TinyFaceDetectorOptions({
-          inputSize: 416,      // 🔥 stronger
-          scoreThreshold: 0.3, // 🔥 more tolerant
+          inputSize: 416,      
+          scoreThreshold: 0.3,
         })
       )
       .withFaceLandmarks();

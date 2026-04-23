@@ -10,7 +10,7 @@ import { waitForVideoReady } from "../lib/services/video.service";
 type UseFaceLivenessProps = {
   webcamRef: React.RefObject<Webcam | null>;
   modelsLoaded: boolean;
-  active: boolean; // 👈 whether selfie step is active
+  active: boolean;
 };
 
 export function useFaceLiveness({

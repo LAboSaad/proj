@@ -1,7 +1,4 @@
 import Tesseract from "tesseract.js";
-import { dataUrlToImage } from "../../utils/image";
-import { cropMRZRegion, extractMRZLines, normalizeMRZText, preprocessMRZCanvas } from "../ocr";
-
 
 export async function runOCR(
   canvas: HTMLCanvasElement,
@@ -19,35 +16,4 @@ export async function runOCR(
       tessedit_pageseg_mode: "6",
     },
   } as any);
-}
-
-export async function runMRZOCR(
-  documentImage: string,
-  setProgress: (p: number) => void
-) {
-  const img = await dataUrlToImage(documentImage);
-
-  const mrzCanvas = cropMRZRegion(img);
-  const processedCanvas = await preprocessMRZCanvas(mrzCanvas);
-
-  const [raw, processed] = await Promise.all([
-    runOCR(mrzCanvas, setProgress),
-    runOCR(processedCanvas, setProgress),
-  ]);
-
-  const rawText = raw.data.text || "";
-  const processedText = processed.data.text || "";
-
-  const score = (t: string) =>
-    t.replace(/[^A-Z0-9<]/g, "").length;
-
-  const bestText =
-    score(processedText) > score(rawText)
-      ? processedText
-      : rawText;
-
-  const cleaned = normalizeMRZText(bestText);
-  const lines = extractMRZLines(cleaned);
-
-  return { cleaned, lines };
 }

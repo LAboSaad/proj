@@ -3,8 +3,8 @@ import type { SubmissionPayload } from "../../types/kyc";
 type Props = {
   payload: SubmissionPayload;
   prevStep: () => void;
-  exportPayloadFile: () => Promise<void>;
-  submitToBackendBoundary: () => Promise<void>;
+  exportPayloadFile: () => void;       
+  submitToBackendBoundary: () => void; 
   resetFlow: () => void;
 };
 
