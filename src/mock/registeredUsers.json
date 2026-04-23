@@ -1,0 +1,12 @@
+[
+  {
+    "msisdn": "243970000001",
+    "name": "John Doe",
+    "status": "REGISTERED"
+  },
+  {
+    "msisdn": "243970000002",
+    "name": "Jane Smith",
+    "status": "REGISTERED"
+  }
+]
