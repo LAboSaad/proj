@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import Webcam from "react-webcam";
 import * as faceapi from "face-api.js";
@@ -7,7 +8,7 @@ import "./index.css";
 import type { AppError, DocumentQuality, ExtractedFields, FaceMatchResult, LandmarkStatus, LivenessChallenge, OcrRunResult, Step } from "./types/kyc";
 
 import { analyzeDocumentQuality } from "./lib/quality";
-import { cropMRZRegion, extractMRZLines, normalizeMRZ, normalizeMRZText, preprocessMRZCanvas, repairMRZLine } from "./lib/ocr";
+import { cropMRZRegion, extractMRZLines, normalizeMRZText, preprocessMRZCanvas } from "./lib/ocr";
 import Header from "./components/layout/Header";
 import Stepper from "./components/layout/Stepper";
 import ConsentStep from "./components/steps/ConsentStep";
@@ -25,11 +26,6 @@ import MSISDNStep from "./components/steps/MSISDNStep";
 import { formatDateYYMMDD } from "./lib/utils";
 import { detectPossibleSpoof } from "./lib/services/spoof.service";
 import { useFaceLiveness } from "./hooks/useFaceLiveness";
-import { runMRZOCR, runOCR } from "./lib/services/ocr.service";
-import { extractFieldsWithAI } from "./lib/services/ai-extraction.service";
-import { normalizeMRZLines, parseMRZFromSource } from "./lib/services/mrz.service";
-import { mapMRZFields } from "./lib/services/field.mapper";
-
 
 /**
  * Production-style KYC Self Registration Frontend (TSX)
@@ -59,7 +55,7 @@ import { mapMRZFields } from "./lib/services/field.mapper";
 export default function App(): JSX.Element {
   const selfieWebcamRef = useRef<Webcam | null>(null);
   const docWebcamRef = useRef<Webcam | null>(null);
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+
   const [stepIndex, setStepIndex] = useState<number>(0);
   const [agreed, setAgreed] = useState<boolean>(false);
   const [modelsLoaded, setModelsLoaded] = useState<boolean>(false);
@@ -121,6 +117,7 @@ const [isEligible, setIsEligible] = useState<boolean | null>(null);
     ]
   );
 
+
   const pushError = useCallback((scope: string, message: string): void => {
     setError({ scope, message });
   }, []);
@@ -160,7 +157,7 @@ const [isEligible, setIsEligible] = useState<boolean | null>(null);
 
     void loadModels();
 
-  
+   
   }, [pushError]);
 
 
@@ -256,30 +253,27 @@ const captureDocument = useCallback(async (): Promise<void> => {
     [clearError, pushError]
   );
 
-
-
-
-const dataURLtoBlob = (dataurl: string): Blob => {
-  const arr = dataurl.split(",");
-  const mimeMatch = arr[0].match(/:(.*?);/);
-  if (!mimeMatch) throw new Error("Invalid data URL");
-
-  const mime = mimeMatch[1];
-  const bstr = atob(arr[1]);
-  let n = bstr.length;
-  const u8arr = new Uint8Array(n);
-
-  while (n--) {
-    u8arr[n] = bstr.charCodeAt(n);
-  }
-
-  return new Blob([u8arr], { type: mime });
-};
-
+async function runOCR(
+  canvas: HTMLCanvasElement,
+  onProgress?: (p: number) => void
+) {
+  return Tesseract.recognize(canvas, "eng", {
+    logger: (info: any) => {
+      if (info.status === "recognizing text" && onProgress) {
+        onProgress(Math.round((info.progress || 0) * 100));
+      }
+    },
+    // ⚠️ MUST be inside config
+    config: {
+      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<",
+      tessedit_pageseg_mode: "6",
+    },
+  } as any);
+}
 
 const runOCRAndMRZ = useCallback(async (): Promise<void> => {
   if (!documentImage) {
-    pushError("ocr", "Capture document first.");
+    pushError("ocr", "Capture or upload a document image first.");
     return;
   }
 
@@ -287,88 +281,193 @@ const runOCRAndMRZ = useCallback(async (): Promise<void> => {
     clearError();
     setBusy(true);
     setOcrProgress(0);
+    setMrzValid(null);
+    setMrzMessage("");
 
-    // 🔹 OCR
-    const { cleaned, lines } = await runMRZOCR(
-      documentImage,
-      setOcrProgress
-    );
+    console.log("🚀 ===== OCR START =====");
 
-    // 🔹 AI
-    const blob = await fetch(documentImage).then((r) => r.blob());
-    const aiFields = await extractFieldsWithAI(
-      blob,
-      OPENAI_API_KEY
-    );
+    // =========================================
+    // STEP 1: LOAD IMAGE
+    // =========================================
+    const img = await dataUrlToImage(documentImage);
+
+    // =========================================
+    // STEP 2: CROP MRZ
+    // =========================================
+    const mrzCanvas = cropMRZRegion(img);
+    console.log("📸 MRZ canvas:", mrzCanvas.width, mrzCanvas.height);
+
+    // =========================================
+    // STEP 3: PREPROCESS
+    // =========================================
+    const processedCanvas = await preprocessMRZCanvas(mrzCanvas);
+    console.log("🧪 Preprocessing done");
+
+    // =========================================
+    // STEP 4: OCR (DUAL)
+    // =========================================
+    const [raw, processed] = await Promise.all([
+      runOCR(mrzCanvas, setOcrProgress),
+      runOCR(processedCanvas, setOcrProgress),
+    ]);
+
+    const rawText = raw.data.text || "";
+    const processedText = processed.data.text || "";
+
+    console.log("🔍 RAW OCR:\n", rawText);
+    console.log("🔍 PROCESSED OCR:\n", processedText);
+
+    // =========================================
+    // STEP 5: PICK BEST OCR
+    // =========================================
+    const score = (t: string) =>
+      t.replace(/[^A-Z0-9<]/g, "").length;
+
+    const bestText =
+      score(processedText) > score(rawText)
+        ? processedText
+        : rawText;
+
+    console.log("🏆 BEST OCR:\n", bestText);
+
+    // =========================================
+    // STEP 6: NORMALIZE
+    // =========================================
+    const cleaned = normalizeMRZText(bestText);
+    console.log("🧼 CLEANED:\n", cleaned);
+
+    // =========================================
+    // STEP 7: EXTRACT LINES
+    // =========================================
+    let lines = extractMRZLines(cleaned);
+    console.log("📏 EXTRACTED LINES:", lines);
 
     let parsed: any = null;
     let mrzSource = "";
-    let message = "No MRZ detected";
+    let message = "No MRZ detected.";
 
-    // 🔥 AI FIRST
-    if (aiFields?.mrzLines?.length === 2) {
-      const aiMRZ = normalizeMRZLines(aiFields.mrzLines);
-console.log("aiFields.mrzLines", aiFields.mrzLines)
-console.log("aiMRZ", aiMRZ)
-      const res = parseMRZFromSource(aiMRZ);
-console.log("checking res in ai", res)
-      parsed = res.parsed;
-      mrzSource = aiMRZ.join("\n");
+    if (lines.length >= 2) {
+      lines = lines.slice(0, 2);
 
-      message = res.valid
-        ? "MRZ valid (AI)"
-        : "AI MRZ invalid";
+      console.log("✂️ USING LINES:", lines);
+
+      // =========================================
+      // STEP 8: SAFE FIXING (NO OVER-REPAIR)
+      // =========================================
+      const fixedLines = lines.map((line, i) => {
+        console.log(`🛠 ORIGINAL ${i}:`, line);
+
+        let l = line;
+
+        // 🔥 remove invalid chars ONLY
+        l = l.replace(/[^A-Z0-9<]/g, "");
+
+        // 🔥 fix VERY COMMON OCR errors (SAFE ONLY)
+        l = l.replace(/^0P/, "P<");
+        l = l.replace(/^OP/, "P<");
+
+        // enforce 44 chars
+        if (l.length < 44) l = l.padEnd(44, "<");
+        if (l.length > 44) l = l.slice(0, 44);
+
+        console.log(`✅ FINAL ${i}:`, l, "| len =", l.length);
+
+        return l;
+      });
+
+      console.log("📦 FIXED LINES:", fixedLines);
+
+      // =========================================
+      // DEBUG COMPARISON
+      // =========================================
+      console.log("🆚 ===== COMPARISON =====");
+      console.log("EXPECTED VALID:");
+    
+      console.log("OCR RESULT:");
+      fixedLines.forEach((l, i) => console.log(`O${i}:`, l));
+
+      // =========================================
+      // STEP 9: PARSE (FIXED BUG HERE)
+      // =========================================
+      try {
+        parsed = parseMRZ(fixedLines);
+
+        console.log("🧠 OCR PARSED:", parsed);
+        console.log("❗ OCR VALID:", parsed.valid);
+
+        if (parsed.valid) {
+          message = "MRZ parsed successfully.";
+        } else {
+          message =
+            "MRZ format detected, but check digits invalid (sample or OCR noise).";
+        }
+
+        mrzSource = fixedLines.join("\n");
+      } catch (err) {
+        console.error("❌ MRZ PARSE ERROR:", err);
+        message = "MRZ detected but unreadable.";
+        mrzSource = fixedLines.join("\n");
+      }
     }
 
-    // 🔥 OCR FALLBACK
-    if (!parsed && lines.length >= 2) {
-      const fixed = normalizeMRZLines(lines.slice(0, 2));
-      console.log("checking fixed",fixed)
-      const res = parseMRZFromSource(fixed);
+    // =========================================
+    // STEP 10: POPULATE FIELDS
+    // =========================================
+   // =========================================
+// STEP 10: POPULATE FIELDS (FIXED)
+// =========================================
+if (parsed && parsed.fields) {
+  const d = parsed.fields;
 
-      parsed = res.parsed;
-      mrzSource = fixed.join("\n");
+  console.log("📄 USING parsed.fields:", d);
 
-      message = res.valid
-        ? "MRZ valid (OCR)"
-        : "OCR MRZ invalid";
-    }
+  const mappedFields = {
+    firstName: (d.firstName || "").replace(/</g, " ").trim(),
+    lastName: (d.lastName || "").replace(/</g, " ").trim(),
+    documentNumber: (d.documentNumber || "").replace(/</g, "").trim(),
+    nationality: (d.nationality || "").trim(),
+    birthDate: d.birthDate ? formatDateYYMMDD(d.birthDate) : "",
+    expiryDate: d.expirationDate
+      ? formatDateYYMMDD(d.expirationDate)
+      : "",
+    sex: (d.sex || "").toUpperCase(),
 
-    const mrzFields = mapMRZFields(parsed);
+    rawMRZ: mrzSource,
+    rawOCRText: cleaned,
+  };
 
-    const useMRZ = parsed?.valid;
+  console.log("✅ FINAL MAPPED FIELDS:", mappedFields);
 
-    const finalFields = {
-      firstName: useMRZ ? mrzFields?.firstName : aiFields.firstName,
-      lastName: useMRZ ? mrzFields?.lastName : aiFields.lastName,
-      documentNumber: useMRZ
-        ? mrzFields?.documentNumber
-        : aiFields.documentNumber,
-      nationality: useMRZ
-        ? mrzFields?.nationality
-        : aiFields.nationality,
-      birthDate: useMRZ
-        ? mrzFields?.birthDate
-        : aiFields.birthDate,
-      expiryDate: useMRZ
-        ? mrzFields?.expiryDate
-        : aiFields.expiryDate,
-      sex: useMRZ ? mrzFields?.sex : aiFields.sex,
-      rawMRZ: mrzSource,
-      rawOCRText: cleaned,
-    };
+  setFields(mappedFields);
 
-    setFields(finalFields);
-    setMrzValid(parsed?.valid ?? false);
-    setMrzMessage(message);
+  setMrzValid(parsed.valid);
+  setMrzMessage(message);
+} else {
+  console.log("⚠️ NO parsed.fields");
+
+  setFields((prev) => ({
+    ...prev,
+    rawMRZ: mrzSource,
+    rawOCRText: cleaned,
+  }));
+
+  setMrzValid(false);
+  setMrzMessage(message);
+}
+
+    console.log("🏁 ===== OCR END =====");
 
     nextStep();
   } catch (err) {
-    pushError("ocr", "OCR failed");
+    console.error("❌ OCR ERROR:", err);
+    pushError(
+      "ocr",
+      err instanceof Error ? err.message : "OCR failed."
+    );
   } finally {
     setBusy(false);
   }
-}, [documentImage]);
+}, [documentImage, clearError, pushError, nextStep]);
 
   const runFaceMatch = useCallback(async (): Promise<void> => {
     if (!selfieImage || !documentImage) {
@@ -445,7 +544,13 @@ console.log("checking res in ai", res)
   }, [clearError]);
 
   const submitToBackendBoundary = useCallback(async (): Promise<void> => {
-
+    // Replace with your backend contract later.
+    // Example:
+    // await fetch("/api/kyc/register", {
+    //   method: "POST",
+    //   headers: { "Content-Type": "application/json" },
+    //   body: JSON.stringify(payload),
+    // });
     alert("Payload is ready. Replace this boundary with your backend POST.");
   }, [payload]);
 
@@ -473,7 +578,7 @@ console.log("checking res in ai", res)
           nextStep={nextStep}
           isEligible={isEligible}
         />
-             )}
+      )}
             {activeStep.key === "consent" && (
              <ConsentStep
                 agreed={agreed}
@@ -483,7 +588,7 @@ console.log("checking res in ai", res)
               />
             )}
 
-             {activeStep.key === "selfie" && (
+            {activeStep.key === "selfie" && (
              <SelfieStep
                 selfieWebcamRef={selfieWebcamRef}
                 videoConstraints={videoConstraints}
@@ -553,9 +658,9 @@ console.log("checking res in ai", res)
   documentQuality={documentQuality}
   payload={payload}
 /> */}
-
         </div>
       </div>
     </div>
   );
 }
+
