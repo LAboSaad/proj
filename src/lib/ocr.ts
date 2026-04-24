@@ -130,16 +130,6 @@ for (let i = 0; i < thresholded.length; i += 4) {
   else blackPixels++;
 }
 
-// In MRZ, text occupies LESS area than background
-// So if white > black → it's wrong → invert
-const shouldInvert = whitePixels > blackPixels;
-
-if (shouldInvert) {
-  for (let i = 0; i < thresholded.length; i += 4) {
-    const v = thresholded[i] === 0 ? 255 : 0;
-    thresholded[i] = thresholded[i + 1] = thresholded[i + 2] = v;
-  }
-}
 
   // ── Step 5: write back ────────────────────────────
   imageData.data.set(thresholded);
