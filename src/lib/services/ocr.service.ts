@@ -10,7 +10,6 @@ export async function runOCR(
         onProgress(Math.round((info.progress || 0) * 100));
       }
     },
-    // ⚠️ MUST be inside config
     config: {
       tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<",
       tessedit_pageseg_mode: "6",

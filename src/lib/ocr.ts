@@ -34,6 +34,58 @@ export function cropMRZRegion(image: HTMLImageElement): HTMLCanvasElement {
   return canvas;
 }
 
+
+
+function adaptiveThreshold(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  const windowSize = 15;
+  const half = Math.floor(windowSize / 2);
+
+  // 🔥 Precompute grayscale once
+  const gray = new Float32Array(width * height);
+
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    gray[j] = (data[i] + data[i + 1] + data[i + 2]) / 3;
+  }
+
+  const out = new Uint8ClampedArray(data.length);
+
+  const getGray = (x: number, y: number) => gray[y * width + x];
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      let count = 0;
+
+      for (let dy = -half; dy <= half; dy++) {
+        for (let dx = -half; dx <= half; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+            sum += getGray(nx, ny);
+            count++;
+          }
+        }
+      }
+
+      const mean = sum / count;
+      const g = getGray(x, y);
+
+      const value = g > mean - 10 ? 255 : 0;
+
+      const i = (y * width + x) * 4;
+      out[i] = out[i + 1] = out[i + 2] = value;
+      out[i + 3] = 255;
+    }
+  }
+
+  return out;
+}
+
 /**
  * ================================
  * Strong MRZ preprocessing
@@ -47,28 +99,50 @@ export async function preprocessMRZCanvas(
 
   const { width, height } = canvas;
 
-  // 🔥 UPSCALE first (huge improvement)
+  // ── Step 1: upscale ───────────────────────────────
   const upscale = document.createElement("canvas");
   upscale.width = width * 2;
   upscale.height = height * 2;
 
   const uctx = upscale.getContext("2d")!;
+
+  // 🔥 Contrast boost BEFORE processing (important)
+  uctx.filter = "contrast(180%) brightness(110%)";
   uctx.drawImage(canvas, 0, 0, upscale.width, upscale.height);
 
+  // ── Step 2: get pixels ────────────────────────────
   const imageData = uctx.getImageData(0, 0, upscale.width, upscale.height);
   const data = imageData.data;
 
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = rgbToGray(data[i], data[i + 1], data[i + 2]);
+  const w = upscale.width;
+  const h = upscale.height;
 
-    // 🔥 adaptive threshold
-    const value = gray > 135 ? 255 : 0;
+  // ── Step 3: adaptive threshold ────────────────────
+  const thresholded = adaptiveThreshold(data, w, h);
 
-    data[i] = value;
-    data[i + 1] = value;
-    data[i + 2] = value;
+ // ── Step 4: enforce MRZ polarity (white text on black) ───
+let whitePixels = 0;
+let blackPixels = 0;
+
+// Count pixels
+for (let i = 0; i < thresholded.length; i += 4) {
+  if (thresholded[i] === 255) whitePixels++;
+  else blackPixels++;
+}
+
+// In MRZ, text occupies LESS area than background
+// So if white > black → it's wrong → invert
+const shouldInvert = whitePixels > blackPixels;
+
+if (shouldInvert) {
+  for (let i = 0; i < thresholded.length; i += 4) {
+    const v = thresholded[i] === 0 ? 255 : 0;
+    thresholded[i] = thresholded[i + 1] = thresholded[i + 2] = v;
   }
+}
 
+  // ── Step 5: write back ────────────────────────────
+  imageData.data.set(thresholded);
   uctx.putImageData(imageData, 0, 0);
 
   return upscale;
