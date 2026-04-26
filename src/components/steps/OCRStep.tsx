@@ -61,7 +61,7 @@ export default function OCRStep({
                   </div>
                   <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-300">
                     <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">Raw OCR text</div>
-                    <pre className="max-h-[240px] overflow-auto rounded-xl bg-slate-900 p-3 text-xs text-slate-200 whitespace-pre-wrap">{fields.rawOCRText || "No OCR text available."}</pre>
+                    <pre className="overflow-auto rounded-xl bg-slate-900 p-3 text-xs text-slate-200 whitespace-pre-wrap">{fields.rawOCRText || "No OCR text available."}</pre>
                   </div>
                 </div>
 
