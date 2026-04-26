@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { GoogleReCaptchaProvider } from "react-google-recaptcha-v3";
 import App from "./App";
 import "./index.css";
+import "../src/assets/i18n";
 
 // Add VITE_RECAPTCHA_SITE_KEY=your_key to your .env file
 const SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string;

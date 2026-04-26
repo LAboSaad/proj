@@ -29,6 +29,7 @@ import FaceMatchStep from "./components/steps/FaceMatchStep";
 import ReviewStep    from "./components/steps/ReviewStep";
 
 import { useState, useMemo } from "react";
+import { LanguageSwitcher } from "./components/layout/LanguageSwitcher";
 
 export default function App(): JSX.Element {
   const selfieWebcamRef = useRef<Webcam | null>(null);
@@ -167,7 +168,8 @@ export default function App(): JSX.Element {
 
   // ── render ────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#a11775] flex justify-center text-slate-100">
+    <div className="min-h-screen px-20 bg-[#a11775] flex justify-center flex-col text-slate-100">
+      <LanguageSwitcher/>
       <div className="mx-auto max-w-7xl flex flex-col justify-center sm:py-10 py-3">
         <Header modelsLoaded={modelsLoaded} activeStepLabel={activeStep.label} />
         <Stepper steps={steps} stepIndex={stepIndex} />
