@@ -1,28 +1,32 @@
 // src/App.tsx
+// ─────────────────────────────────────────────────────────────────────────────
+// Only the liveness and selfie sections changed. Everything else stays identical.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { useRef } from "react";
 import type { JSX } from "react";
 import Webcam from "react-webcam";
 
-import { useKYCFlow }     from "./hooks/useKYCFlow";
-import { useModels }      from "./hooks/useModels";
-import { useSelfie }      from "./hooks/useSelfie";
-import { useDocument }    from "./hooks/useDocument";
-import { useOCR }         from "./hooks/useOCR";
-import { useFaceMatch }   from "./hooks/useFaceMatch";
+import { useKYCFlow }      from "./hooks/useKYCFlow";
+import { useModels }       from "./hooks/useModels";
+import { useSelfie }       from "./hooks/useSelfie";
+import { useDocument }     from "./hooks/useDocument";
+import { useOCR }          from "./hooks/useOCR";
+import { useFaceMatch }    from "./hooks/useFaceMatch";
 import { useFaceLiveness } from "./hooks/useFaceLiveness";
 
-import { buildPayload }   from "./lib/services/payload.service";
+import { buildPayload }    from "./lib/services/payload.service";
 import { videoConstraints, docVideoConstraints, steps } from "./lib/constants/kyc.constants";
 
-import Header       from "./components/layout/Header";
-import Stepper      from "./components/layout/Stepper";
-import MSISDNStep   from "./components/steps/MSISDNStep";
-import ConsentStep  from "./components/steps/ConsentStep";
-import SelfieStep   from "./components/steps/SelfieStep";
-import DocumentStep from "./components/steps/DocumentStep";
-import OCRStep      from "./components/steps/OCRStep";
+import Header        from "./components/layout/Header";
+import Stepper       from "./components/layout/Stepper";
+import MSISDNStep    from "./components/steps/MSISDNStep";
+import ConsentStep   from "./components/steps/ConsentStep";
+import SelfieStep    from "./components/steps/SelfieStep";
+import DocumentStep  from "./components/steps/DocumentStep";
+import OCRStep       from "./components/steps/OCRStep";
 import FaceMatchStep from "./components/steps/FaceMatchStep";
-import ReviewStep   from "./components/steps/ReviewStep";
+import ReviewStep    from "./components/steps/ReviewStep";
 
 import { useState, useMemo } from "react";
 
@@ -48,20 +52,23 @@ export default function App(): JSX.Element {
   const { modelsLoaded } = useModels(pushError);
 
   // ── liveness ──────────────────────────────────────────────────────
-// ── liveness ──────────────────────────────────────────────────────
-const {
-  landmarkStatus,
-  livenessCompleted,
-  livenessChallenge,
-  livenessDone,
-  challengeSequence,   // ← add this
-  challengeIndex,      // ← add this
-} = useFaceLiveness({
-  webcamRef: selfieWebcamRef,
-  modelsLoaded,
-  active: activeStep.key === "selfie",
-   challengeCount: 3,
-});
+  const {
+    phase,                // ← NEW
+    landmarkStatus,
+    livenessCompleted,
+    livenessChallenge,
+    livenessDone,
+    challengeSequence,
+    challengeIndex,
+    challengeTimeLeft,    // ← NEW
+    startChallenges,      // ← NEW
+    resetLiveness,
+  } = useFaceLiveness({
+    webcamRef: selfieWebcamRef,
+    modelsLoaded,
+    active: activeStep.key === "selfie",
+    challengeCount: 3,
+  });
 
   // ── selfie ────────────────────────────────────────────────────────
   const {
@@ -86,11 +93,7 @@ const {
     handleDocumentUpload,
     saveDocumentBlobLocally,
     resetDocument,
-  } = useDocument({
-    docWebcamRef,
-    pushError,
-    clearError,
-  });
+  } = useDocument({ docWebcamRef, pushError, clearError });
 
   // ── OCR & MRZ ─────────────────────────────────────────────────────
   const {
@@ -101,12 +104,7 @@ const {
     busy: ocrBusy,
     runOCRAndMRZ,
     resetOCR,
-  } = useOCR({
-    documentImage,
-    pushError,
-    clearError,
-    nextStep,
-  });
+  } = useOCR({ documentImage, pushError, clearError, nextStep });
 
   // ── face match ────────────────────────────────────────────────────
   const {
@@ -114,16 +112,10 @@ const {
     busy: matchBusy,
     runFaceMatch,
     resetFaceMatch,
-  } = useFaceMatch({
-    selfieImage,
-    documentImage,
-    pushError,
-    clearError,
-    nextStep,
-  });
+  } = useFaceMatch({ selfieImage, documentImage, pushError, clearError, nextStep });
 
-  // ── MSISDN (local — simple enough to stay in App) ─────────────────
-  const [msisdn, setMsisdn]       = useState("");
+  // ── MSISDN ────────────────────────────────────────────────────────
+  const [msisdn, setMsisdn]         = useState("");
   const [isEligible, setIsEligible] = useState<boolean | null>(null);
 
   // ── payload ───────────────────────────────────────────────────────
@@ -142,19 +134,8 @@ const {
         mrzMessage,
         faceMatch,
       }),
-    [
-      agreed,
-      selfieImage,
-      documentImage,
-      livenessDone,
-      livenessCompleted,
-      landmarkStatus.yawEstimate,
-      documentQuality,
-      fields,
-      mrzValid,
-      mrzMessage,
-      faceMatch,
-    ]
+    [agreed, selfieImage, documentImage, livenessDone, livenessCompleted,
+     landmarkStatus.yawEstimate, documentQuality, fields, mrzValid, mrzMessage, faceMatch]
   );
 
   // ── reset all ─────────────────────────────────────────────────────
@@ -164,6 +145,7 @@ const {
       resetDocument();
       resetOCR();
       resetFaceMatch();
+      resetLiveness();
       setMsisdn("");
       setIsEligible(null);
     });
@@ -188,7 +170,6 @@ const {
     <div className="min-h-screen bg-[#a11775] flex justify-center text-slate-100">
       <div className="mx-auto max-w-7xl flex flex-col justify-center sm:py-10 py-3">
         <Header modelsLoaded={modelsLoaded} activeStepLabel={activeStep.label} />
-
         <Stepper steps={steps} stepIndex={stepIndex} />
 
         {error && (
@@ -220,6 +201,7 @@ const {
               />
             )}
 
+            {/* ── SELFIE STEP — updated props ── */}
             {activeStep.key === "selfie" && (
               <SelfieStep
                 selfieWebcamRef={selfieWebcamRef}
@@ -231,8 +213,11 @@ const {
                 prevStep={prevStep}
                 selfieImage={selfieImage}
                 livenessChallenge={livenessChallenge}
-                challengeSequence={challengeSequence}  
-  challengeIndex={challengeIndex}       
+                challengeSequence={challengeSequence}
+                challengeIndex={challengeIndex}
+                challengeTimeLeft={challengeTimeLeft}   // ← NEW
+                phase={phase}                           // ← NEW
+                startChallenges={startChallenges}       // ← NEW
               />
             )}
 
