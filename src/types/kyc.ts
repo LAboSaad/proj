@@ -1,3 +1,5 @@
+import type { LivenessChallenge } from "../lib/constants/kyc.constants";
+
 export type StepKey =
 "msisdn"
   | "consent"
@@ -12,7 +14,7 @@ export type Step = {
   label: string;
 };
 
-export type LivenessChallenge = "center" | "lookLeft" | "lookRight";
+// export type LivenessChallenge = "center" | "lookLeft" | "lookRight";
 
 export type AppError = {
   scope: string;

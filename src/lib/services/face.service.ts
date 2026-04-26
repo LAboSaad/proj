@@ -1,8 +1,11 @@
+// src/lib/services/face.service.ts
 import * as faceapi from "face-api.js";
 import { similarityFromDistance } from "../utils";
 import type { FaceMatchResult } from "../../types/kyc";
 
 const FACE_MATCH_THRESHOLD = 0.52;
+
+// ─── Yaw ──────────────────────────────────────────────────────────────────────
 
 export function computeYawFromLandmarks(landmarks: faceapi.FaceLandmarks68): number {
   const pts = landmarks.positions;
@@ -14,12 +17,31 @@ export function computeYawFromLandmarks(landmarks: faceapi.FaceLandmarks68): num
   return noseCenter - 0.5;
 }
 
+// ─── Quality ──────────────────────────────────────────────────────────────────
+
 export function computeFaceQuality(
   detection: faceapi.WithFaceLandmarks<{ detection: faceapi.FaceDetection }, faceapi.FaceLandmarks68>
 ): boolean {
   const box = detection.detection.box;
   return box.width > 160 && box.height > 160 && detection.detection.score > 0.75;
 }
+
+// ─── Face size (for moveCloser challenge) ─────────────────────────────────────
+
+/**
+ * Returns face bounding box width as a fraction of video width.
+ * A value > 0.35 means the face is close enough.
+ */
+export function computeFaceSizeRatio(
+  detection: faceapi.WithFaceLandmarks<{ detection: faceapi.FaceDetection }, faceapi.FaceLandmarks68>,
+  videoWidth: number
+): number {
+  const boxWidth = detection.detection.box.width;
+  return boxWidth / Math.max(1, videoWidth);
+}
+
+
+// ─── Descriptor ───────────────────────────────────────────────────────────────
 
 export async function getBestFaceDescriptor(
   input: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement
@@ -32,6 +54,8 @@ export async function getBestFaceDescriptor(
   if (!detection) throw new Error("No face detected.");
   return detection;
 }
+
+// ─── Match ────────────────────────────────────────────────────────────────────
 
 export function getFaceMatchVerdict(distance: number): FaceMatchResult {
   const similarity = similarityFromDistance(distance);

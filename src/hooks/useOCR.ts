@@ -325,43 +325,29 @@ console.log("processed", processed)
     // ✅ KEEP THIS EXACT (for display)
     const rawMRZText = bestText;
 
-    // ── Step 6: minimal structural prep ONLY ────────
-    // ❗ NOT fixing characters, ONLY making it parsable
-    let lines = bestText
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
+   // ── Step 6: RAW MRZ only (no cleaning, no replacement) ──
+let lines = bestText
+  .split("\n")
+  .map((l) => l.trim())
+  .filter(Boolean);
 
-    let parsed: any = null;
-    let message = "No MRZ detected.";
-    let mrzSource = rawMRZText;
+let parsed: any = null;
+let message = "No MRZ detected.";
 
-    if (lines.length >= 2) {
-      lines = lines.slice(0, 2);
+if (lines.length >= 2) {
+  const candidateLines = lines.slice(0, 2);
 
-      const parseReadyLines = lines.map((line) => {
-        let l = line
-          .toUpperCase()
-          .replace(/[^A-Z0-9<]/g, ""); // remove noise only
+  try {
+    // 🔥 PURE RAW INPUT (unchanged)
+    parsed = parseMRZ(candidateLines);
 
-        // ONLY enforce length (NOT content correction)
-        if (l.length < 44) l = l.padEnd(44, "<");
-        if (l.length > 44) l = l.slice(0, 44);
-
-        return l;
-      });
-
-      try {
-        parsed = parseMRZ(parseReadyLines);
-        message = parsed.valid
-          ? "MRZ parsed successfully."
-          : "MRZ format detected, check digits may be invalid.";
-
-        mrzSource = parseReadyLines.join("\n");
-      } catch {
-        message = "MRZ detected but unreadable.";
-      }
-    }
+    message = parsed.valid
+      ? "MRZ parsed successfully (raw)."
+      : "MRZ detected (raw), check digits may be invalid.";
+  } catch {
+    message = "MRZ detected but unreadable (raw only, no cleanup applied).";
+  }
+}
 
     // ── Step 7: populate fields ─────────────────────
     if (parsed?.fields) {

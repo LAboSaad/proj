@@ -48,16 +48,20 @@ export default function App(): JSX.Element {
   const { modelsLoaded } = useModels(pushError);
 
   // ── liveness ──────────────────────────────────────────────────────
-  const {
-    landmarkStatus,
-    livenessCompleted,
-    livenessChallenge,
-    livenessDone,
-  } = useFaceLiveness({
-    webcamRef: selfieWebcamRef,
-    modelsLoaded,
-    active: activeStep.key === "selfie",
-  });
+// ── liveness ──────────────────────────────────────────────────────
+const {
+  landmarkStatus,
+  livenessCompleted,
+  livenessChallenge,
+  livenessDone,
+  challengeSequence,   // ← add this
+  challengeIndex,      // ← add this
+} = useFaceLiveness({
+  webcamRef: selfieWebcamRef,
+  modelsLoaded,
+  active: activeStep.key === "selfie",
+   challengeCount: 3,
+});
 
   // ── selfie ────────────────────────────────────────────────────────
   const {
@@ -227,6 +231,8 @@ export default function App(): JSX.Element {
                 prevStep={prevStep}
                 selfieImage={selfieImage}
                 livenessChallenge={livenessChallenge}
+                challengeSequence={challengeSequence}  
+  challengeIndex={challengeIndex}       
               />
             )}
 

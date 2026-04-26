@@ -1,10 +1,10 @@
+// src/lib/constants/kyc.constants.ts
 import type { ExtractedFields, Step } from "../../types/kyc";
 
-export 
-const steps: Step[] = [
-  //  { key: "msisdn", label: "Mobile Number" },
-  // { key: "consent", label: "Consent" },
-  // { key: "selfie", label: "Selfie & Liveness" },
+export const steps: Step[] = [
+   { key: "msisdn", label: "Mobile Number" },
+  { key: "consent", label: "Consent" },
+  { key: "selfie", label: "Selfie & Liveness" },
   { key: "document", label: "Document Capture" },
   { key: "ocr", label: "OCR & MRZ" },
   { key: "match", label: "Face Match" },
@@ -33,4 +33,37 @@ export const initialFields: ExtractedFields = {
   sex: "",
   rawMRZ: "",
   rawOCRText: "",
+};
+
+export type LivenessChallenge =
+  | "center"
+  | "lookLeft"
+  | "lookRight"
+  | "raiseLeftHand"
+  | "raiseRightHand"
+  | "nodHead"
+  | "moveCloser"
+
+export type LandmarkStatus = {
+  faceDetected: boolean;
+  yawEstimate: number;
+  qualityOk: boolean;
+  hint: string;
+};
+
+export type FaceMatchResult = {
+  distance: number;
+  similarity: number;
+  threshold: number;
+  passed: boolean;
+  status: "pass" | "review";
+};
+
+export type ChallengeConfig = {
+  id: LivenessChallenge;
+  label: string;
+  instruction: string;
+  icon: string;
+  requiresHand: boolean;
+  requiresPose: boolean;
 };
