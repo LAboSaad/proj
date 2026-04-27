@@ -53,16 +53,17 @@ export default function App(): JSX.Element {
   const { modelsLoaded } = useModels(pushError);
 
   // ── liveness ──────────────────────────────────────────────────────
-  const {
-    phase,                // ← NEW
+const {
+    phase,
     landmarkStatus,
     livenessCompleted,
     livenessChallenge,
     livenessDone,
     challengeSequence,
     challengeIndex,
-    challengeTimeLeft,    // ← NEW
-    startChallenges,      // ← NEW
+    challengeTimeLeft,
+    startChallenges,
+    retryChallenge,  
     resetLiveness,
   } = useFaceLiveness({
     webcamRef: selfieWebcamRef,
@@ -204,24 +205,27 @@ export default function App(): JSX.Element {
             )}
 
             {/* ── SELFIE STEP — updated props ── */}
-            {activeStep.key === "selfie" && (
-              <SelfieStep
-                selfieWebcamRef={selfieWebcamRef}
-                videoConstraints={videoConstraints}
-                landmarkStatus={landmarkStatus}
-                livenessCompleted={livenessCompleted}
-                livenessDone={livenessDone}
-                captureSelfie={captureSelfie}
-                prevStep={prevStep}
-                selfieImage={selfieImage}
-                livenessChallenge={livenessChallenge}
-                challengeSequence={challengeSequence}
-                challengeIndex={challengeIndex}
-                challengeTimeLeft={challengeTimeLeft}   // ← NEW
-                phase={phase}                           // ← NEW
-                startChallenges={startChallenges}       // ← NEW
-              />
-            )}
+           
+              {activeStep.key === "selfie" && (
+  <SelfieStep
+    selfieWebcamRef={selfieWebcamRef}
+    videoConstraints={videoConstraints}
+    landmarkStatus={landmarkStatus}
+    livenessCompleted={livenessCompleted}
+    livenessDone={livenessDone}
+    captureSelfie={captureSelfie}
+    prevStep={prevStep}
+    selfieImage={selfieImage}
+    livenessChallenge={livenessChallenge}
+    challengeSequence={challengeSequence}
+    challengeIndex={challengeIndex}
+    challengeTimeLeft={challengeTimeLeft}
+    phase={phase}
+    startChallenges={startChallenges}
+    retryChallenge={retryChallenge}  
+  />
+)}
+          
 
             {activeStep.key === "document" && (
               <DocumentStep

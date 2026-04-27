@@ -18,6 +18,7 @@ export default function SelfieStep({
   challengeTimeLeft,
   phase,
   startChallenges,
+  retryChallenge,
 }: {
   selfieWebcamRef: React.RefObject<any>;
   videoConstraints: object;
@@ -33,6 +34,7 @@ export default function SelfieStep({
   challengeTimeLeft: number;
   phase: LivenessPhase;
   startChallenges: () => void;
+  retryChallenge: () => void;
 }) {
   const currentConfig = CHALLENGE_CONFIGS[livenessChallenge];
 
@@ -53,10 +55,11 @@ export default function SelfieStep({
         <div>
           <h2 className="text-2xl font-semibold">Selfie &amp; Liveness Check</h2>
           <p className="mt-1 text-sm text-slate-400">
-            {phase === "detecting" && "Position your face in the frame to begin."}
-            {phase === "ready"     && "Face detected! Ready to start the challenge."}
+            {phase === "detecting"   && "Position your face in the frame to begin."}
+            {phase === "ready"       && "Face detected! Ready to start the challenge."}
             {phase === "challenging" && `Challenge ${challengeIndex + 1} of ${challengeSequence.length}`}
-            {phase === "done"      && "All challenges complete. Capture your selfie!"}
+            {phase === "timeout"     && "Challenge timed out."}
+            {phase === "done"        && "All challenges complete. Capture your selfie!"}
           </p>
         </div>
 
@@ -146,6 +149,23 @@ export default function SelfieStep({
             </div>
           )}
 
+          {/* ── TIMEOUT overlay ── */}
+          {phase === "timeout" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 gap-5 px-6 text-center">
+              <div className="text-5xl animate-bounce">⏰</div>
+              <p className="text-2xl font-semibold text-white">Time's Up!</p>
+              <p className="text-slate-300 text-sm max-w-xs">
+                You didn't complete the challenge in time. Let's try again from the beginning.
+              </p>
+              <button
+                onClick={retryChallenge}
+                className="mt-2 rounded-2xl bg-amber-500 px-8 py-3 font-semibold text-slate-950 hover:bg-amber-400 transition-colors"
+              >
+                Retry Challenges →
+              </button>
+            </div>
+          )}
+
           {/* ── DONE overlay ── */}
           {phase === "done" && (
             <div className="absolute top-3 left-3 right-3 flex items-center gap-2 rounded-2xl bg-emerald-900/80 border border-emerald-700 px-4 py-2 text-sm text-emerald-200">
@@ -174,7 +194,7 @@ export default function SelfieStep({
             </div>
 
             <div className="rounded-xl bg-slate-900 p-3 text-slate-200 text-sm leading-snug">
-              {phase === "challenging" ? landmarkStatus.hint : landmarkStatus.hint}
+              {landmarkStatus.hint}
             </div>
           </div>
 
@@ -185,10 +205,10 @@ export default function SelfieStep({
             </div>
             <div className="space-y-2">
               {challengeSequence.map((id, i) => {
-                const cfg     = CHALLENGE_CONFIGS[id];
-                const done    = livenessCompleted[id];
-                const isCurrent = phase === "challenging" && i === challengeIndex;
-                const isFuture  = phase !== "done" && i > challengeIndex && !done;
+                const cfg        = CHALLENGE_CONFIGS[id];
+                const done       = livenessCompleted[id];
+                const isCurrent  = phase === "challenging" && i === challengeIndex;
+                const isFuture   = phase !== "done" && i > challengeIndex && !done;
 
                 return (
                   <div

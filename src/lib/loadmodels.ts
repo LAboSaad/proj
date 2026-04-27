@@ -6,7 +6,7 @@
 import * as faceapi from "face-api.js";
 import { loadGestureModels } from "./services/gesture.service";
 
-const MODELS_URL = "/models"; // your existing face-api model path
+const MODELS_URL = "/models";
 
 export async function loadAllModels(): Promise<void> {
   await Promise.all([

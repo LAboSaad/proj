@@ -21,7 +21,7 @@ import {
   isRaisingRightHand,
 } from "../lib/services/gesture.service";
 
-export type LivenessPhase = "detecting" | "ready" | "challenging" | "done";
+export type LivenessPhase = "detecting" | "ready" | "challenging" | "timeout" | "done";
 
 type UseFaceLivenessProps = {
   webcamRef: React.RefObject<Webcam | null>;
@@ -53,13 +53,23 @@ export function useFaceLiveness({
 
   // ── Phase ──────────────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<LivenessPhase>("detecting");
+  // Keep a ref so analyzeLiveFace always reads the latest phase without
+  // being recreated on every phase change (which caused interval thrashing).
+  const phaseRef = useRef<LivenessPhase>("detecting");
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   // ── Challenges ─────────────────────────────────────────────────────────────
-  const [challengeSequence] = useState<LivenessChallenge[]>(() =>
+  const [challengeSequence, setChallengeSequence] = useState<LivenessChallenge[]>(() =>
     buildChallengeSequence(challengeCount)
   );
   const [challengeIndex, setChallengeIndex] = useState(0);
   const [completedSet, setCompletedSet]     = useState<Set<LivenessChallenge>>(new Set());
+
+  // Keep refs so analyzeLiveFace always reads latest values
+  const challengeSequenceRef = useRef(challengeSequence);
+  const challengeIndexRef    = useRef(challengeIndex);
+  useEffect(() => { challengeSequenceRef.current = challengeSequence; }, [challengeSequence]);
+  useEffect(() => { challengeIndexRef.current = challengeIndex; }, [challengeIndex]);
 
   // ── Per-challenge timer countdown (0-5) ────────────────────────────────────
   const [challengeTimeLeft, setChallengeTimeLeft] = useState<number>(CHALLENGE_TIMEOUT_MS / 1000);
@@ -102,6 +112,22 @@ export function useFaceLiveness({
     }
   }, []);
 
+  // ── Start per-challenge countdown timer ────────────────────────────────────
+  const startChallengeTimer = useCallback((forIndex: number) => {
+    clearChallengeTimer();
+    let remaining = CHALLENGE_TIMEOUT_MS / 1000;
+    setChallengeTimeLeft(remaining);
+
+    challengeTimerRef.current = window.setInterval(() => {
+      remaining -= 1;
+      setChallengeTimeLeft(remaining);
+      if (remaining <= 0) {
+        const challenge = challengeSequenceRef.current[forIndex];
+        advanceChallengeRef.current(false, forIndex, challenge);
+      }
+    }, 1000);
+  }, [clearChallengeTimer]);
+
   // ── Advance to next challenge ──────────────────────────────────────────────
   const advanceChallenge = useCallback(
     (passed: boolean, currentIndex: number, currentChallenge: LivenessChallenge) => {
@@ -114,67 +140,95 @@ export function useFaceLiveness({
           next.add(currentChallenge);
           return next;
         });
-      }
 
-      const nextIndex = currentIndex + 1;
-      if (nextIndex >= challengeSequence.length) {
-        setChallengeIndex(challengeSequence.length - 1);
-        setPhase("done");
+        const seq = challengeSequenceRef.current;
+        const nextIndex = currentIndex + 1;
+        if (nextIndex >= seq.length) {
+          setChallengeIndex(seq.length - 1);
+          setPhase("done");
+          phaseRef.current = "done";
+        } else {
+          setChallengeIndex(nextIndex);
+          setChallengeTimeLeft(CHALLENGE_TIMEOUT_MS / 1000);
+          startChallengeTimer(nextIndex);
+        }
       } else {
-        setChallengeIndex(nextIndex);
-        setChallengeTimeLeft(CHALLENGE_TIMEOUT_MS / 1000);
-        // Start the countdown for the next challenge
-        startChallengeTimer(nextIndex);
+        // Timed out — show timeout overlay, halt detection
+        setPhase("timeout");
+        phaseRef.current = "timeout";
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [challengeSequence, clearChallengeTimer]
+    [clearChallengeTimer, startChallengeTimer]
   );
 
-  // ── Start per-challenge countdown timer ────────────────────────────────────
-  // Stored in ref so advanceChallenge can be called inside without stale closure
   const advanceChallengeRef = useRef(advanceChallenge);
   useEffect(() => { advanceChallengeRef.current = advanceChallenge; }, [advanceChallenge]);
-
-  const startChallengeTimer = useCallback((forIndex: number) => {
-    clearChallengeTimer();
-    let remaining = CHALLENGE_TIMEOUT_MS / 1000;
-    setChallengeTimeLeft(remaining);
-
-    challengeTimerRef.current = window.setInterval(() => {
-      remaining -= 1;
-      setChallengeTimeLeft(remaining);
-      if (remaining <= 0) {
-        // Time's up — advance without marking as passed
-        const challenge = challengeSequence[forIndex];
-        advanceChallengeRef.current(false, forIndex, challenge);
-      }
-    }, 1000);
-  }, [challengeSequence, clearChallengeTimer]);
 
   // ── "Are you ready?" — user clicks ready ──────────────────────────────────
   const startChallenges = useCallback(() => {
     setChallengeIndex(0);
+    challengeIndexRef.current = 0;
     setCompletedSet(new Set());
     setChallengeTimeLeft(CHALLENGE_TIMEOUT_MS / 1000);
     setPhase("challenging");
+    phaseRef.current = "challenging";
     startChallengeTimer(0);
   }, [startChallengeTimer]);
 
-  // ── Main analysis loop ─────────────────────────────────────────────────────
+  // ── Retry after timeout — full reset back to detecting ────────────────────
+  const retryChallenge = useCallback(() => {
+    clearChallengeTimer();
+    pitchWindow.current = [];
+
+    const freshSequence = buildChallengeSequence(challengeCount);
+    setChallengeSequence(freshSequence);
+    challengeSequenceRef.current = freshSequence;
+
+    setChallengeIndex(0);
+    challengeIndexRef.current = 0;
+
+    setCompletedSet(new Set());
+    setChallengeTimeLeft(CHALLENGE_TIMEOUT_MS / 1000);
+    setLandmarkStatus({
+      faceDetected: false,
+      yawEstimate: 0,
+      qualityOk: false,
+      hint: "Center your face inside the frame.",
+    });
+
+    setPhase("detecting");
+    phaseRef.current = "detecting";
+  }, [clearChallengeTimer, challengeCount]);
+
+  // ── Main analysis loop — reads phase/index/sequence via refs ──────────────
   const analyzeLiveFace = useCallback(async (): Promise<void> => {
     if (!modelsLoaded) return;
 
     const video = webcamRef.current?.video as HTMLVideoElement | undefined;
     if (!video) return;
 
-    // During "detecting" phase — just check for face presence
-    if (phase === "detecting") {
+    const currentPhase = phaseRef.current;
+
+    // ── DETECTING / READY ────────────────────────────────────────────────────
+    if (currentPhase === "detecting" || currentPhase === "ready") {
       try {
         await waitForVideoReady(video);
         const detections = await faceapi
           .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 }))
           .withFaceLandmarks();
+
+        if (detections?.length > 1) {
+          setLandmarkStatus((prev) => ({
+            ...prev,
+            faceDetected: false,
+            hint: "Only one person should be in frame.",
+          }));
+          if (currentPhase === "ready") {
+            setPhase("detecting");
+            phaseRef.current = "detecting";
+          }
+          return;
+        }
 
         const faceDetected = detections?.length === 1;
         setLandmarkStatus((prev) => ({
@@ -185,8 +239,9 @@ export function useFaceLiveness({
             : "Center your face inside the frame.",
         }));
 
-        if (faceDetected) {
+        if (faceDetected && currentPhase === "detecting") {
           setPhase("ready");
+          phaseRef.current = "ready";
         }
       } catch (err) {
         console.error("Face detection error:", err);
@@ -194,10 +249,15 @@ export function useFaceLiveness({
       return;
     }
 
-    // During "challenging" phase — run full liveness check
-    if (phase !== "challenging") return;
+    // ── CHALLENGING ──────────────────────────────────────────────────────────
+    if (currentPhase !== "challenging") return;
 
-    const needsPose = POSE_CHALLENGES.has(livenessChallenge);
+    const currentIndex    = challengeIndexRef.current;
+    const currentSequence = challengeSequenceRef.current;
+    const currentChallenge: LivenessChallenge =
+      currentSequence[currentIndex] ?? currentSequence[currentSequence.length - 1];
+
+    const needsPose = POSE_CHALLENGES.has(currentChallenge);
     if (needsPose && !areGestureModelsLoaded()) {
       setLandmarkStatus((prev) => ({
         ...prev,
@@ -238,11 +298,11 @@ export function useFaceLiveness({
       const qualityOk    = computeFaceQuality(detection);
       const gestureFrame = areGestureModelsLoaded() ? detectGestures(video) : null;
 
-      const config = CHALLENGE_CONFIGS[livenessChallenge];
+      const config = CHALLENGE_CONFIGS[currentChallenge];
       let hint     = config.instruction;
       let passed   = false;
 
-      switch (livenessChallenge) {
+      switch (currentChallenge) {
         case "center":
           if (Math.abs(yaw) < 0.08 && qualityOk) {
             passed = true;
@@ -299,7 +359,7 @@ export function useFaceLiveness({
       }
 
       if (passed) {
-        advanceChallenge(true, challengeIndex, livenessChallenge);
+        advanceChallengeRef.current(true, currentIndex, currentChallenge);
       }
 
       setLandmarkStatus({
@@ -311,22 +371,18 @@ export function useFaceLiveness({
     } catch (err) {
       console.error("Face detection error:", err);
     }
-  }, [
-    modelsLoaded,
-    webcamRef,
-    phase,
-    livenessChallenge,
-    challengeIndex,
-    detectNod,
-    advanceChallenge,
-  ]);
+  }, [modelsLoaded, webcamRef, detectNod]);
 
-  // ── Detection interval ─────────────────────────────────────────────────────
+
+  // ── Detection interval ───────────────────────
   useEffect(() => {
     if (!active || !modelsLoaded) return;
-    if (phase === "done") return;
 
     intervalRef.current = window.setInterval(() => {
+      // Guard inside the callback using the ref so we don't need to
+      // restart the interval every time phase changes
+      const p = phaseRef.current;
+      if (p === "done" || p === "timeout") return;
       void analyzeLiveFace();
     }, 650);
 
@@ -336,22 +392,26 @@ export function useFaceLiveness({
         intervalRef.current = null;
       }
     };
-  }, [active, modelsLoaded, analyzeLiveFace, phase]);
+  }, [active, modelsLoaded, analyzeLiveFace]);
+
 
   // ── Cleanup on unmount ─────────────────────────────────────────────────────
   useEffect(() => {
-    return () => {
-      clearChallengeTimer();
-    };
+    return () => { clearChallengeTimer(); };
   }, [clearChallengeTimer]);
 
   // ── Reset ──────────────────────────────────────────────────────────────────
   const resetLiveness = useCallback(() => {
     clearChallengeTimer();
+    const freshSequence = buildChallengeSequence(challengeCount);
+    setChallengeSequence(freshSequence);
+    challengeSequenceRef.current = freshSequence;
     setChallengeIndex(0);
+    challengeIndexRef.current = 0;
     setCompletedSet(new Set());
     setChallengeTimeLeft(CHALLENGE_TIMEOUT_MS / 1000);
     setPhase("detecting");
+    phaseRef.current = "detecting";
     pitchWindow.current = [];
     setLandmarkStatus({
       faceDetected: false,
@@ -359,7 +419,7 @@ export function useFaceLiveness({
       qualityOk: false,
       hint: "Center your face inside the frame.",
     });
-  }, [clearChallengeTimer]);
+  }, [clearChallengeTimer, challengeCount]);
 
   return {
     phase,
@@ -371,6 +431,7 @@ export function useFaceLiveness({
     challengeIndex,
     challengeTimeLeft,
     startChallenges,
+    retryChallenge,
     resetLiveness,
   };
 }
