@@ -22,22 +22,9 @@ interface MSISDNStepProps {
 }
 
 // ── Mock captcha verifier ──────────────────────────────────────────────────
-// Replace the body of this function with a real fetch() to your backend:
-//
-//   POST /api/verify-captcha  { token }
-//   → backend calls https://www.google.com/recaptcha/api/siteverify
-//     with secret + token, then checks data.success && data.score >= 0.5
-//
+
 async function verifyCaptchaToken(token: string): Promise<boolean> {
   console.log("🔒 reCAPTCHA token (send to backend):", token);
-  // TODO: swap this mock for your real backend call
-  // const res  = await fetch("/api/verify-captcha", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
-  //   body: JSON.stringify({ token }),
-  // });
-  // const data = await res.json();
-  // return data.success && data.score >= 0.5;
   return true;
 }
 
@@ -86,8 +73,8 @@ export default function MSISDNStep({
 
     setLoading(true);
     try {
-      const token      = await executeRecaptcha("msisdn_check");
-      const captchaOk  = await verifyCaptchaToken(token);
+      const token     = await executeRecaptcha("msisdn_check");
+      const captchaOk = await verifyCaptchaToken(token);
 
       if (!captchaOk) {
         setCaptchaError("Security check failed. Please try again.");
@@ -103,13 +90,13 @@ export default function MSISDNStep({
         return;
       }
 
-      generateOTP();
+      await generateOTP(msisdn);
       setOtpError("");
       setPhase("OTP_SENT");
       setIsEligible(true);
     } catch (err) {
-      console.error("reCAPTCHA error:", err);
-      setCaptchaError("Security check encountered an error. Please refresh and try again.");
+      console.error("OTP generation error:", err);
+      setCaptchaError("Failed to send verification code. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -135,7 +122,7 @@ export default function MSISDNStep({
         return;
       }
 
-      const result = verifyOTP(code);
+      const result = await verifyOTP(msisdn, code);
 
       if (result.ok) {
         setPhase("VERIFIED");
@@ -157,20 +144,28 @@ export default function MSISDNStep({
           break;
       }
     } catch (err) {
-      console.error("reCAPTCHA error:", err);
-      setOtpError("Security check encountered an error. Please try again.");
+      console.error("OTP verification error:", err);
+      setOtpError("Verification failed. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, [executeRecaptcha, nextStep]);
+  }, [msisdn, executeRecaptcha, nextStep]);
 
   // ── Resend OTP ─────────────────────────────────────────────────────────────
-  const handleResend = useCallback(() => {
+  const handleResend = useCallback(async () => {
     clearOTP();
     setOtpError("");
     setCaptchaError("");
-    generateOTP();
-  }, []);
+    setLoading(true);
+    try {
+      await generateOTP(msisdn);
+    } catch (err) {
+      console.error("OTP resend error:", err);
+      setOtpError("Failed to resend code. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [msisdn]);
 
   // ── Go back to phone input ─────────────────────────────────────────────────
   const handleBack = () => {
@@ -243,14 +238,13 @@ export default function MSISDNStep({
             {loading ? (
               <>
                 <span className="w-4 h-4 rounded-full border-2 border-slate-950/30 border-t-slate-950 animate-spin" />
-                Verifying…
+                Sending code…
               </>
             ) : (
               "Send verification code →"
             )}
           </button>
 
-          {/* Required Google disclosure when badge is hidden */}
           <p className="text-center text-xs text-slate-600">
             Protected by reCAPTCHA —{" "}
             <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer"

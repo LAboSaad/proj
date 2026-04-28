@@ -1,4 +1,5 @@
 import registeredUsers from "../../mock/registeredUsers.json";
+import { apiGenerateOTP, apiValidateOTP } from "../api/kyc.api";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -8,44 +9,55 @@ export type OTPResult =
   | { ok: true }
   | { ok: false; reason: "WRONG_CODE" | "EXPIRED" | "MAX_ATTEMPTS" };
 
-// ── Internal OTP store (in-memory mock — replace with backend call) ─────────
+// ── Constants ──────────────────────────────────────────────────────────────
 
-interface OTPRecord {
-  code: string;
-  expiresAt: number;   // epoch ms
-  attempts: number;
+const TOKEN_STORAGE_KEY = "kyc_otp_token";
+
+// ── OTP session (memory only for expiry) ───────────────────────────────────
+
+interface OTPSession {
+  msisdn: string;
+  expiresAt: number;
 }
 
-const OTP_TTL_MS      = 2 * 60 * 1000; // 2 minutes
-const MAX_OTP_ATTEMPTS = 3;
+let activeSession: OTPSession | null = null;
 
-// Single active OTP slot (one session at a time in this mock)
-let activeOTP: OTPRecord | null = null;
+// ── Utils ─────────────────────────────────────────────────────────────────
 
-// ── Normalisation ──────────────────────────────────────────────────────────
-
-/**
- * Strip leading + and whitespace, return digits only.
- * "+243 97 000 0001" → "2439700000001"
- */
 export function normalizeMSISDN(raw: string): string {
   return raw.replace(/^\+/, "").replace(/\s/g, "");
 }
 
-/**
- * Loose E.164 check: optional leading +, then 7–15 digits, first digit non-zero.
- */
 export function isValidE164(msisdn: string): boolean {
   return /^\+?[1-9]\d{6,14}$/.test(msisdn.trim());
 }
 
-// ── Check registration ─────────────────────────────────────────────────────
+// ── Storage helpers (ONLY TOKEN STRING) ────────────────────────────────────
+
+function saveToken(token: string): void {
+  console.log("💾 Saving token (string only)");
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+}
+
+function loadToken(): string | null {
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+
+  console.log("📦 Loaded token:", token);
+
+  return token;
+}
+
+function removeToken(): void {
+  console.log("🧹 Removing token");
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+// ── Registration check ─────────────────────────────────────────────────────
 
 export function checkMSISDN(msisdn: string): CheckResult {
   if (!isValidE164(msisdn)) return "INVALID";
 
   const normalized = normalizeMSISDN(msisdn);
-
   const exists = registeredUsers.some(
     (u) => normalizeMSISDN(u.msisdn) === normalized
   );
@@ -53,63 +65,103 @@ export function checkMSISDN(msisdn: string): CheckResult {
   return exists ? "REGISTERED" : "ELIGIBLE";
 }
 
-// ── OTP lifecycle ──────────────────────────────────────────────────────────
+// ── Generate OTP ───────────────────────────────────────────────────────────
 
-/** Generate and store a new OTP. Returns the code (log / send via SMS). */
-export function generateOTP(): string {
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  activeOTP = {
-    code,
-    expiresAt: Date.now() + OTP_TTL_MS,
-    attempts: 0,
+export async function generateOTP(msisdn: string): Promise<void> {
+  const normalized = normalizeMSISDN(msisdn);
+  const data = await apiGenerateOTP(normalized);
+
+  if (data.StatusCode !== 200 || data.Status !== "successful") {
+    throw new Error(data.StatusDescription ?? "OTP generation failed");
+  }
+
+  const token = data.Data.Token.Token;
+  const ttlMs = data.Data.Token.TokenValidity * 1000;
+
+  const serverTime = new Date(data.StatusDate).getTime();
+  const expiresAt = serverTime + ttlMs;
+
+  console.log("🧠 expiresAt:", new Date(expiresAt).toString());
+
+  // ✅ Save ONLY token
+  saveToken(token);
+
+  // ✅ Keep expiry ONLY in memory
+  activeSession = {
+    msisdn: normalized,
+    expiresAt,
   };
-  // 🔥 In production: send SMS here instead of console.log
-  console.log("📩 Mock OTP:", code);
-  return code;
 }
 
-/** Seconds remaining on the active OTP (0 if none / expired). */
+// ── Timer ──────────────────────────────────────────────────────────────────
+
 export function getOTPSecondsLeft(): number {
-  if (!activeOTP) return 0;
-  return Math.max(0, Math.ceil((activeOTP.expiresAt - Date.now()) / 1000));
+  if (!activeSession) return 0;
+
+  return Math.max(
+    0,
+    Math.ceil((activeSession.expiresAt - Date.now()) / 1000)
+  );
 }
 
-/** Verify the user-supplied code against the stored OTP. */
-export function verifyOTP(input: string): OTPResult {
-  if (!activeOTP) return { ok: false, reason: "EXPIRED" };
+// ── Attempts ───────────────────────────────────────────────────────────────
 
-  if (Date.now() > activeOTP.expiresAt) {
-    activeOTP = null;
+export function getOTPAttemptsLeft(): number {
+  return activeSession ? 3 : 0;
+}
+
+// ── Verify OTP ─────────────────────────────────────────────────────────────
+
+export async function verifyOTP(
+  msisdn: string,
+  otp: string
+): Promise<OTPResult> {
+  if (!activeSession) {
     return { ok: false, reason: "EXPIRED" };
   }
 
-  if (activeOTP.attempts >= MAX_OTP_ATTEMPTS) {
-    activeOTP = null;
-    return { ok: false, reason: "MAX_ATTEMPTS" };
+  if (Date.now() > activeSession.expiresAt) {
+    activeSession = null;
+    removeToken();
+    return { ok: false, reason: "EXPIRED" };
   }
 
-  activeOTP.attempts += 1;
+  const token = loadToken();
+  if (!token) {
+    activeSession = null;
+    return { ok: false, reason: "EXPIRED" };
+  }
 
-  if (input.trim() === activeOTP.code) {
-    activeOTP = null;
+  const normalized = normalizeMSISDN(msisdn);
+  const data = await apiValidateOTP(normalized, otp, token);
+
+  if (data.StatusCode === 200 && data.Status === "successful") {
+    console.log("✅ OTP verified");
+    // activeSession = null;
+    // removeToken();
     return { ok: true };
   }
 
-  if (activeOTP.attempts >= MAX_OTP_ATTEMPTS) {
-    activeOTP = null;
+  const desc = data.StatusDescription ?? "";
+
+  if (/expired/i.test(desc)) {
+    activeSession = null;
+    removeToken();
+    return { ok: false, reason: "EXPIRED" };
+  }
+
+  if (/attempt|limit|max/i.test(desc)) {
+    activeSession = null;
+    removeToken();
     return { ok: false, reason: "MAX_ATTEMPTS" };
   }
 
   return { ok: false, reason: "WRONG_CODE" };
 }
 
-/** How many attempts remain on the active OTP. */
-export function getOTPAttemptsLeft(): number {
-  if (!activeOTP) return 0;
-  return Math.max(0, MAX_OTP_ATTEMPTS - activeOTP.attempts);
-}
+// ── Clear session ──────────────────────────────────────────────────────────
 
-/** Invalidate the current OTP (e.g. on resend). */
 export function clearOTP(): void {
-  activeOTP = null;
+  activeSession = null;
+  removeToken();
 }

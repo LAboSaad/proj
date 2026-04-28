@@ -12,7 +12,7 @@ interface OTPSectionProps {
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const OTP_LENGTH = 6;
+const OTP_LENGTH = 5;
 
 // ── Component ──────────────────────────────────────────────────────────────
 
@@ -110,7 +110,7 @@ export default function OTPSection({
 
       {/* Timer row */}
       <div className="flex items-center justify-between text-sm">
-        <p className="text-slate-400">Enter the 6-digit code.</p>
+        <p className="text-slate-400">Enter the 5-digit code.</p>
         {!canResend && (
           <span className={`tabular-nums font-medium transition-colors ${
             isUrgent ? "text-rose-400" : "text-slate-400"
