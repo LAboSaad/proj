@@ -1,9 +1,4 @@
-// src/App.tsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Only the liveness and selfie sections changed. Everything else stays identical.
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { useRef } from "react";
+import { useRef, useState, useMemo, useCallback } from "react";
 import type { JSX } from "react";
 import Webcam from "react-webcam";
 
@@ -32,7 +27,6 @@ import OCRStep from "./components/steps/OCRStep";
 import FaceMatchStep from "./components/steps/FaceMatchStep";
 import ReviewStep from "./components/steps/ReviewStep";
 
-import { useState, useMemo } from "react";
 import { LanguageSwitcher } from "./components/layout/LanguageSwitcher";
 import { transformToBackendPayload } from "./utils/image";
 
@@ -57,7 +51,7 @@ export default function App(): JSX.Element {
   // ── model loading ─────────────────────────────────────────────────
   const { modelsLoaded } = useModels(pushError);
 
-  // ── liveness ──────────────────────────────────────────────────────
+  // ── liveness ─────────────────────────────────────────────────────
   const {
     phase,
     landmarkStatus,
@@ -90,11 +84,16 @@ export default function App(): JSX.Element {
   const {
     documentImage,
     documentQuality,
+    documentBackImage,
+    documentBackQuality,
     documentPreviewMode,
     setDocumentPreviewMode,
     captureDocument,
+    captureDocumentBack,
     handleDocumentUpload,
+    handleDocumentBackUpload,
     saveDocumentBlobLocally,
+    saveDocumentBackBlobLocally,
     resetDocument,
   } = useDocument({ docWebcamRef, pushError, clearError });
 
@@ -128,13 +127,13 @@ export default function App(): JSX.Element {
   const [isEligible, setIsEligible] = useState<boolean | null>(null);
 
   // ── payload ───────────────────────────────────────────────────────
-  // internal (full KYC payload)
   const internalPayload = useMemo(
     () =>
       buildPayload({
         consentAccepted: agreed,
         selfieImage,
         documentImage,
+        documentBackImage,
         livenessDone,
         livenessCompleted,
         finalYawEstimate: landmarkStatus.yawEstimate,
@@ -148,6 +147,7 @@ export default function App(): JSX.Element {
       agreed,
       selfieImage,
       documentImage,
+      documentBackImage,
       livenessDone,
       livenessCompleted,
       landmarkStatus.yawEstimate,
@@ -159,7 +159,6 @@ export default function App(): JSX.Element {
     ],
   );
 
-  // backend (clean payload)
   const backendPayload = useMemo(
     () => transformToBackendPayload(internalPayload, msisdn),
     [internalPayload, msisdn],
@@ -237,8 +236,6 @@ export default function App(): JSX.Element {
               />
             )}
 
-            {/* ── SELFIE STEP — updated props ── */}
-
             {activeStep.key === "selfie" && (
               <SelfieStep
                 selfieWebcamRef={selfieWebcamRef}
@@ -265,13 +262,18 @@ export default function App(): JSX.Element {
                 setDocumentPreviewMode={setDocumentPreviewMode}
                 docWebcamRef={docWebcamRef}
                 captureDocument={captureDocument}
+                captureDocumentBack={captureDocumentBack}
                 handleDocumentUpload={handleDocumentUpload}
+                handleDocumentBackUpload={handleDocumentBackUpload}
                 documentImage={documentImage}
+                documentBackImage={documentBackImage}
                 runOCRAndMRZ={runOCRAndMRZ}
                 prevStep={prevStep}
                 docVideoConstraints={docVideoConstraints}
                 documentQuality={documentQuality}
+                documentBackQuality={documentBackQuality}
                 saveDocumentBlobLocally={saveDocumentBlobLocally}
+                saveDocumentBackBlobLocally={saveDocumentBackBlobLocally}
                 busy={ocrBusy}
               />
             )}

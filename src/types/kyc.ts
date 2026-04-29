@@ -79,7 +79,8 @@ export type SubmissionPayload = {
   capturedAt: string;
   images: {
     selfie: string;
-    document: string;
+    IdDocFontPhoto_b64: string;
+    IdDocRearPhoto_b64: string;
   };
   liveness: {
     completed: boolean;

@@ -76,10 +76,40 @@ export function rgbToGray(r: number, g: number, b: number): number {
   return 0.299 * r + 0.587 * g + 0.114 * b;
 }
 
+function truncate(value: unknown, maxLength = 50): unknown {
+  if (typeof value !== "string") return value;
+
+  return value.length > maxLength ? value.slice(0, maxLength) + "..." : value;
+}
+export function truncateDeep(obj: any, maxLength = 50): any {
+  if (typeof obj === "string") {
+    return truncate(obj, maxLength);
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => truncateDeep(item, maxLength));
+  }
+
+  if (typeof obj === "object" && obj !== null) {
+    const result: any = {};
+    for (const key in obj) {
+      result[key] = truncateDeep(obj[key], maxLength);
+    }
+    return result;
+  }
+
+  return obj;
+}
+
 export function transformToBackendPayload(
   payload: SubmissionPayload,
   msisdn: string,
 ) {
+  // Read language from i18next localStorage key, fallback to "EN"
+  const rawLang = localStorage.getItem("i18nextLng") ?? "EN";
+  // i18next sometimes stores "en-US" — normalize to just the 2-letter code uppercased
+  const language = rawLang.split("-")[0].toUpperCase();
+
   return {
     FirstName: payload.ocr.FirstName || "",
     MiddleName: payload.ocr.MiddleName || "",
@@ -91,7 +121,7 @@ export function transformToBackendPayload(
     BirthDate: formatDate(payload.ocr.BirthDate),
 
     Address: "Luanda",
-    Language: "EN",
+    Language: language, // ← from i18next
 
     Nationality: payload.ocr.Nationality || "",
 
@@ -111,7 +141,7 @@ export function transformToBackendPayload(
     MSISDN: msisdn,
 
     MobileMoney_Registration: false,
-    IdDocFontPhoto_b64: payload.images.document || "",
-    IdDocRearPhoto_b64: "",
+    IdDocFontPhoto_b64: payload.images.IdDocFontPhoto_b64 || "",
+    IdDocRearPhoto_b64: payload.images.IdDocRearPhoto_b64 || "",
   };
 }

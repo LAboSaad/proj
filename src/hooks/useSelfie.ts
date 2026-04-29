@@ -1,4 +1,3 @@
-// src/hooks/useSelfie.ts
 import { useCallback, useState } from "react";
 import type { RefObject } from "react";
 import Webcam from "react-webcam";
@@ -16,8 +15,10 @@ interface UseSelfieProps {
 
 interface UseSelfieReturn {
   selfieImage: string;
+  selfieSideImage: string;
   setSelfieImage: (v: string) => void;
   captureSelfie: () => Promise<void>;
+  captureSelfieSide: (dataUrl: string) => Promise<void>; // ← receives dataUrl
   resetSelfie: () => void;
 }
 
@@ -29,6 +30,21 @@ export function useSelfie({
   nextStep,
 }: UseSelfieProps): UseSelfieReturn {
   const [selfieImage, setSelfieImage] = useState("");
+  const [selfieSideImage, setSelfieSideImage] = useState(""); // ← new
+
+  // Called automatically when lookLeft or lookRight challenge passes
+  const captureSelfieSide = useCallback(
+    async (dataUrl: string): Promise<void> => {
+      try {
+        const dataUrl = webcamRef.current?.getScreenshot();
+        if (!dataUrl) return; // silent — this is automatic, not user-triggered
+        setSelfieSideImage(dataUrl);
+      } catch {
+        // non-critical, don't surface to user
+      }
+    },
+    [webcamRef],
+  );
 
   const captureSelfie = useCallback(async (): Promise<void> => {
     try {
@@ -44,7 +60,10 @@ export function useSelfie({
 
       const spoof = await detectPossibleSpoof(dataUrl);
       if (spoof) {
-        pushError("security", "Possible spoof detected (screen/photo). Please try again.");
+        pushError(
+          "security",
+          "Possible spoof detected (screen/photo). Please try again.",
+        );
         return;
       }
 
@@ -55,19 +74,22 @@ export function useSelfie({
     } catch (err) {
       pushError(
         "selfie",
-        err instanceof Error ? err.message : "Selfie capture failed."
+        err instanceof Error ? err.message : "Selfie capture failed.",
       );
     }
   }, [webcamRef, livenessDone, pushError, clearError, nextStep]);
 
   const resetSelfie = useCallback(() => {
     setSelfieImage("");
+    setSelfieSideImage(""); // ← new
   }, []);
 
   return {
     selfieImage,
+    selfieSideImage, // ← new
     setSelfieImage,
     captureSelfie,
+    captureSelfieSide, // ← new
     resetSelfie,
   };
 }

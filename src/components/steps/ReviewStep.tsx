@@ -1,4 +1,5 @@
 import type { SubmissionPayload } from "../../types/kyc";
+import { truncateDeep } from "../../utils/image";
 
 type BackendPayload = {
   FirstName: string;
@@ -56,8 +57,8 @@ export default function ReviewStep({
         <div className="mb-2 text-xs uppercase tracking-wide text-cyan-400">
           Backend Payload (THIS WILL BE SENT)
         </div>
-        <pre className=" overflow-auto rounded-2xl bg-slate-900 p-4 text-xs text-slate-100 whitespace-pre-wrap">
-          {JSON.stringify(backendPayload, null, 2)}
+        <pre className="overflow-auto rounded-2xl bg-slate-900 p-4 text-xs text-slate-100 whitespace-pre-wrap">
+          {JSON.stringify(truncateDeep(backendPayload), null, 2)}
         </pre>
       </div>
 
@@ -66,8 +67,8 @@ export default function ReviewStep({
         <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">
           Internal Payload (debug)
         </div>
-        <pre className=" overflow-auto rounded-2xl bg-slate-900 p-4 text-xs text-slate-100 whitespace-pre-wrap">
-          {JSON.stringify(internalPayload, null, 2)}
+        <pre className="overflow-auto rounded-2xl bg-slate-900 p-4 text-xs text-slate-100 whitespace-pre-wrap">
+          {JSON.stringify(truncateDeep(internalPayload), null, 2)}
         </pre>
       </div>
 

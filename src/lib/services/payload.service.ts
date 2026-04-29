@@ -10,6 +10,7 @@ export function buildPayload(args: {
   consentAccepted: boolean;
   selfieImage: string;
   documentImage: string;
+  documentBackImage: string;
   livenessDone: boolean;
   livenessCompleted: Record<LivenessChallenge, boolean>;
   finalYawEstimate: number;
@@ -23,6 +24,7 @@ export function buildPayload(args: {
     consentAccepted,
     selfieImage,
     documentImage,
+    documentBackImage,
     livenessDone,
     livenessCompleted,
     finalYawEstimate,
@@ -35,20 +37,22 @@ export function buildPayload(args: {
 
   const readyForBackendPost = Boolean(
     consentAccepted &&
-      selfieImage &&
-      documentImage &&
-      livenessDone &&
-      fields.rawOCRText &&
-      faceMatch &&
-      documentQuality?.looksUsefulForOCR
+    selfieImage &&
+    documentImage &&
+    livenessDone &&
+    fields.rawOCRText &&
+    faceMatch &&
+    documentQuality?.looksUsefulForOCR,
   );
-
+  console.log("documentImage?", documentImage);
+  console.log("documentBackImage", documentBackImage);
   return {
     consentAccepted,
     capturedAt: new Date().toISOString(),
     images: {
       selfie: selfieImage,
-      document: documentImage,
+      IdDocFontPhoto_b64: documentImage,
+      IdDocRearPhoto_b64: documentBackImage,
     },
     liveness: {
       completed: livenessDone,
