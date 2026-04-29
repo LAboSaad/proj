@@ -24,13 +24,13 @@ export const docVideoConstraints = {
 };
 
 export const initialFields: ExtractedFields = {
-  firstName: "",
-  lastName: "",
-  documentNumber: "",
-  nationality: "",
-  birthDate: "",
-  expiryDate: "",
-  sex: "",
+  FirstName: "",
+  LastName: "",
+  IdDocSerialNumber: "",
+  Nationality: "",
+  BirthDate: "",
+  ExpiryDate: "",
+  Gender: "",
   rawMRZ: "",
   rawOCRText: "",
 };

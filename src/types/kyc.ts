@@ -22,13 +22,13 @@ export type AppError = {
 };
 
 export type ExtractedFields = {
-  firstName: string;
-  lastName: string;
-  documentNumber: string;
-  nationality: string;
-  birthDate: string;
-  expiryDate: string;
-  sex: string;
+  FirstName: string;
+  LastName: string;
+  IdDocSerialNumber: string;
+  Nationality: string;
+  BirthDate: string;
+  ExpiryDate: string;
+  Gender: string;
   rawMRZ: string;
   rawOCRText: string;
 };

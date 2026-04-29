@@ -5,13 +5,14 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
 }
 
 export function mean(values: number[]): number {
-  return values.reduce((acc, value) => acc + value, 0) / Math.max(1, values.length);
+  return (
+    values.reduce((acc, value) => acc + value, 0) / Math.max(1, values.length)
+  );
 }
 export function variance(values: number[]): number {
   const avg = mean(values);
   return mean(values.map((value) => (value - avg) ** 2));
 }
-
 
 export function similarityFromDistance(distance: number): number {
   const similarity = Math.max(0, Math.min(1, 1 - distance / 0.9));
@@ -21,31 +22,48 @@ export function similarityFromDistance(distance: number): number {
 export function mapFieldKey(label: string): keyof ExtractedFields {
   switch (label) {
     case "First name":
-      return "firstName";
+      return "FirstName";
     case "Last name":
-      return "lastName";
+      return "LastName";
     case "Document number":
-      return "documentNumber";
+      return "IdDocSerialNumber";
     case "Nationality":
-      return "nationality";
+      return "Nationality";
     case "Birth date":
-      return "birthDate";
+      return "BirthDate";
     case "Expiry date":
-      return "expiryDate";
+      return "ExpiryDate";
     case "Sex":
-      return "sex";
+      return "Gender";
     default:
-      return "firstName";
+      return "FirstName";
   }
 }
 
-export function formatDateYYMMDD(input: string): string {
-  if (!input || input.length !== 6) return input;
-  const yy = Number(input.slice(0, 2));
-  const mm = input.slice(2, 4);
-  const dd = input.slice(4, 6);
-  const year = yy > 40 ? 1900 + yy : 2000 + yy;
-  return `${year}-${mm}-${dd}`;
+export function formatDate(date: string) {
+  if (!date) return "";
+
+  // 🧠 Handle MRZ format (YYMMDD)
+  if (/^\d{6}$/.test(date)) {
+    const yy = parseInt(date.slice(0, 2), 10);
+    const mm = date.slice(2, 4);
+    const dd = date.slice(4, 6);
+
+    // MRZ rule: 00–49 → 2000s, 50–99 → 1900s
+    const fullYear = yy < 50 ? 2000 + yy : 1900 + yy;
+
+    return `${dd}-${mm}-${fullYear}`;
+  }
+
+  // 🧠 Handle normal ISO dates (fallback)
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "";
+
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+
+  return `${day}-${month}-${year}`;
 }
 
 export const toBase64 = (file: Blob): Promise<string> =>

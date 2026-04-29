@@ -2,9 +2,9 @@ import type {
   DocumentQuality,
   ExtractedFields,
   FaceMatchResult,
-  LivenessChallenge,
   SubmissionPayload,
 } from "../../types/kyc";
+import type { LivenessChallenge } from "../constants/kyc.constants";
 
 export function buildPayload(args: {
   consentAccepted: boolean;

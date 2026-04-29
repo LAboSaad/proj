@@ -38,11 +38,11 @@ export default function MSISDNStep({
 }: MSISDNStepProps) {
   const { executeRecaptcha } = useGoogleReCaptcha();
 
-  const [phase, setPhase]               = useState<Phase>("IDLE");
-  const [inputError, setInputError]     = useState("");
-  const [otpError, setOtpError]         = useState("");
+  const [phase, setPhase] = useState<Phase>("IDLE");
+  const [inputError, setInputError] = useState("");
+  const [otpError, setOtpError] = useState("");
   const [captchaError, setCaptchaError] = useState("");
-  const [loading, setLoading]           = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // ── Phone number input ─────────────────────────────────────────────────────
   const handlePhoneChange = (value: string) => {
@@ -73,7 +73,7 @@ export default function MSISDNStep({
 
     setLoading(true);
     try {
-      const token     = await executeRecaptcha("msisdn_check");
+      const token = await executeRecaptcha("msisdn_check");
       const captchaOk = await verifyCaptchaToken(token);
 
       if (!captchaOk) {
@@ -103,53 +103,58 @@ export default function MSISDNStep({
   }, [msisdn, executeRecaptcha, setIsEligible]);
 
   // ── Verify OTP (guarded by reCAPTCHA) ─────────────────────────────────────
-  const handleVerify = useCallback(async (code: string) => {
-    setOtpError("");
-    setCaptchaError("");
+  const handleVerify = useCallback(
+    async (code: string) => {
+      setOtpError("");
+      setCaptchaError("");
 
-    if (!executeRecaptcha) {
-      setCaptchaError("Security check not ready yet. Please wait a moment.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const token     = await executeRecaptcha("otp_verify");
-      const captchaOk = await verifyCaptchaToken(token);
-
-      if (!captchaOk) {
-        setOtpError("Security check failed. Please try again.");
+      if (!executeRecaptcha) {
+        setCaptchaError("Security check not ready yet. Please wait a moment.");
         return;
       }
 
-      const result = await verifyOTP(msisdn, code);
+      setLoading(true);
+      try {
+        const token = await executeRecaptcha("otp_verify");
+        const captchaOk = await verifyCaptchaToken(token);
 
-      if (result.ok) {
-        setPhase("VERIFIED");
-        nextStep();
-        return;
-      }
+        if (!captchaOk) {
+          setOtpError("Security check failed. Please try again.");
+          return;
+        }
 
-      switch (result.reason) {
-        case "WRONG_CODE":
-          setOtpError("Incorrect code — please try again.");
-          break;
-        case "EXPIRED":
-          setOtpError("This code has expired. Please request a new one.");
-          setPhase("IDLE");
-          break;
-        case "MAX_ATTEMPTS":
-          setOtpError("Too many incorrect attempts. Please request a new code.");
-          setPhase("IDLE");
-          break;
+        const result = await verifyOTP(msisdn, code);
+
+        if (result.ok) {
+          setPhase("VERIFIED");
+          nextStep();
+          return;
+        }
+
+        switch (result.reason) {
+          case "WRONG_CODE":
+            setOtpError("Incorrect code — please try again.");
+            break;
+          case "EXPIRED":
+            setOtpError("This code has expired. Please request a new one.");
+            setPhase("IDLE");
+            break;
+          case "MAX_ATTEMPTS":
+            setOtpError(
+              "Too many incorrect attempts. Please request a new code.",
+            );
+            setPhase("IDLE");
+            break;
+        }
+      } catch (err) {
+        console.error("OTP verification error:", err);
+        setOtpError("Verification failed. Please try again.");
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error("OTP verification error:", err);
-      setOtpError("Verification failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, [msisdn, executeRecaptcha, nextStep]);
+    },
+    [msisdn, executeRecaptcha, nextStep],
+  );
 
   // ── Resend OTP ─────────────────────────────────────────────────────────────
   const handleResend = useCallback(async () => {
@@ -181,7 +186,6 @@ export default function MSISDNStep({
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <section className="space-y-6">
-
       {/* Header */}
       <div>
         <h2 className="text-2xl font-semibold">Verify your number</h2>
@@ -210,9 +214,10 @@ export default function MSISDNStep({
             className={`w-full rounded-2xl bg-slate-900 border px-4 py-3 text-slate-100
               placeholder:text-slate-600 outline-none transition-all focus:ring-2
               disabled:opacity-50 disabled:cursor-not-allowed
-              ${inputError
-                ? "border-rose-500 focus:border-rose-400 focus:ring-rose-400/20"
-                : "border-slate-700 focus:border-cyan-500 focus:ring-cyan-400/20"
+              ${
+                inputError
+                  ? "border-rose-500 focus:border-rose-400 focus:ring-rose-400/20"
+                  : "border-slate-700 focus:border-cyan-500 focus:ring-cyan-400/20"
               }`}
           />
 
@@ -247,11 +252,23 @@ export default function MSISDNStep({
 
           <p className="text-center text-xs text-slate-600">
             Protected by reCAPTCHA —{" "}
-            <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer"
-              className="underline hover:text-slate-400 transition-colors">Privacy</a>
-            {" "}&amp;{" "}
-            <a href="https://policies.google.com/terms" target="_blank" rel="noreferrer"
-              className="underline hover:text-slate-400 transition-colors">Terms</a>
+            <a
+              href="https://policies.google.com/privacy"
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-slate-400 transition-colors"
+            >
+              Privacy
+            </a>{" "}
+            &amp;{" "}
+            <a
+              href="https://policies.google.com/terms"
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-slate-400 transition-colors"
+            >
+              Terms
+            </a>
           </p>
         </div>
       )}
@@ -287,11 +304,23 @@ export default function MSISDNStep({
 
           <p className="text-center text-xs text-slate-600">
             Protected by reCAPTCHA —{" "}
-            <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer"
-              className="underline hover:text-slate-400 transition-colors">Privacy</a>
-            {" "}&amp;{" "}
-            <a href="https://policies.google.com/terms" target="_blank" rel="noreferrer"
-              className="underline hover:text-slate-400 transition-colors">Terms</a>
+            <a
+              href="https://policies.google.com/privacy"
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-slate-400 transition-colors"
+            >
+              Privacy
+            </a>{" "}
+            &amp;{" "}
+            <a
+              href="https://policies.google.com/terms"
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-slate-400 transition-colors"
+            >
+              Terms
+            </a>
           </p>
         </div>
       )}
