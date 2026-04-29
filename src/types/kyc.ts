@@ -1,7 +1,7 @@
 import type { LivenessChallenge } from "../lib/constants/kyc.constants";
 
 export type StepKey =
-"msisdn"
+  | "msisdn"
   | "consent"
   | "selfie"
   | "document"
@@ -23,7 +23,9 @@ export type AppError = {
 
 export type ExtractedFields = {
   FirstName: string;
+  MiddleName: string;
   LastName: string;
+  Email: string;
   IdDocSerialNumber: string;
   Nationality: string;
   BirthDate: string;

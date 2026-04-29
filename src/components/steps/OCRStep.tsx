@@ -22,12 +22,14 @@ export default function OCRStep({
       <div className="grid gap-4 md:grid-cols-2">
         {[
           ["First name", fields.FirstName],
+          ["Middle name", fields.MiddleName],
           ["Last name", fields.LastName],
+          ["Email", fields.Email],
           ["Document number", fields.IdDocSerialNumber],
           ["Nationality", fields.Nationality],
           ["Birth date", fields.BirthDate],
           ["Expiry date", fields.ExpiryDate],
-          ["Sex", fields.Gender],
+          ["Gender", fields.Gender],
         ].map(([label, value]) => {
           const key = mapFieldKey(label);
           console.log("Fields", fields);

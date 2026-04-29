@@ -82,7 +82,8 @@ export function transformToBackendPayload(
 ) {
   return {
     FirstName: payload.ocr.FirstName || "",
-    MiddleName: "middle", // static or from input
+    MiddleName: payload.ocr.MiddleName || "",
+    Email: payload.ocr.Email || "",
     LastName: payload.ocr.LastName || "",
 
     Gender: payload.ocr.Gender?.toLowerCase() === "male" ? "Male" : "Female",
@@ -91,7 +92,6 @@ export function transformToBackendPayload(
 
     Address: "Luanda",
     Language: "EN",
-    Email: "test@africell.ao",
 
     Nationality: payload.ocr.Nationality || "",
 

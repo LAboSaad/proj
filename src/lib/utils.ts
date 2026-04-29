@@ -23,8 +23,12 @@ export function mapFieldKey(label: string): keyof ExtractedFields {
   switch (label) {
     case "First name":
       return "FirstName";
+    case "Middle name":
+      return "MiddleName";
     case "Last name":
       return "LastName";
+    case "Email":
+      return "Email";
     case "Document number":
       return "IdDocSerialNumber";
     case "Nationality":
