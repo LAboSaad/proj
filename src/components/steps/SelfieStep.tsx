@@ -12,6 +12,8 @@ export default function SelfieStep({
   captureSelfie,
   prevStep,
   selfieImage,
+  faceSidePhoto,
+  captureFaceSidePhoto,
   livenessChallenge,
   challengeSequence,
   challengeIndex,
@@ -28,12 +30,13 @@ export default function SelfieStep({
     yawEstimate: number;
     hint: string;
   };
-
   livenessCompleted: Record<LivenessChallenge, boolean>;
   livenessDone: boolean;
   captureSelfie: () => Promise<void>;
   prevStep: () => void;
   selfieImage: string;
+  faceSidePhoto: string;
+  captureFaceSidePhoto: () => Promise<void>;
   livenessChallenge: LivenessChallenge;
   challengeSequence: LivenessChallenge[];
   challengeIndex: number;
@@ -44,7 +47,6 @@ export default function SelfieStep({
 }) {
   const currentConfig = CHALLENGE_CONFIGS[livenessChallenge];
 
-  // Timer ring: percentage of time left out of 5s
   const timerPercent = Math.max(0, (challengeTimeLeft / 5) * 100);
   const timerColor =
     challengeTimeLeft > 3
@@ -53,7 +55,6 @@ export default function SelfieStep({
         ? "#fbbf24"
         : "#f87171";
 
-  // SVG ring params
   const RADIUS = 20;
   const CIRC = 2 * Math.PI * RADIUS;
   const dash = (timerPercent / 100) * CIRC;
@@ -79,7 +80,6 @@ export default function SelfieStep({
           </p>
         </div>
 
-        {/* Step badge */}
         <div className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-xs text-slate-400 uppercase tracking-widest">
           {phase === "done"
             ? "✓ Liveness verified"
@@ -100,7 +100,7 @@ export default function SelfieStep({
             className="w-full object-cover"
           />
 
-          {/* ── DETECTING overlay ── */}
+          {/* DETECTING */}
           {phase === "detecting" && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 gap-3">
               <div className="w-10 h-10 rounded-full border-4 border-slate-600 border-t-cyan-400 animate-spin" />
@@ -108,7 +108,7 @@ export default function SelfieStep({
             </div>
           )}
 
-          {/* ── READY overlay ── */}
+          {/* READY */}
           {phase === "ready" && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-5 px-6 text-center">
               <div className="text-4xl animate-bounce">👤</div>
@@ -131,10 +131,9 @@ export default function SelfieStep({
             </div>
           )}
 
-          {/* ── CHALLENGING overlay (top banner) ── */}
+          {/* CHALLENGING */}
           {phase === "challenging" && (
             <div className="absolute top-0 left-0 right-0 flex items-center gap-3 bg-black/75 backdrop-blur px-4 py-3">
-              {/* Timer ring */}
               <svg
                 width="48"
                 height="48"
@@ -170,7 +169,6 @@ export default function SelfieStep({
                   fill="white"
                   fontSize="12"
                   fontWeight="bold"
-                  className="rotate-90"
                   style={{
                     transform: "rotate(90deg)",
                     transformOrigin: "24px 24px",
@@ -191,7 +189,7 @@ export default function SelfieStep({
             </div>
           )}
 
-          {/* ── TIMEOUT overlay ── */}
+          {/* TIMEOUT */}
           {phase === "timeout" && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 gap-5 px-6 text-center">
               <div className="text-5xl animate-bounce">⏰</div>
@@ -209,7 +207,7 @@ export default function SelfieStep({
             </div>
           )}
 
-          {/* ── DONE overlay ── */}
+          {/* DONE */}
           {phase === "done" && (
             <div className="absolute top-3 left-3 right-3 flex items-center gap-2 rounded-2xl bg-emerald-900/80 border border-emerald-700 px-4 py-2 text-sm text-emerald-200">
               <span className="text-lg">✓</span>
@@ -222,12 +220,11 @@ export default function SelfieStep({
 
         {/* Right panel */}
         <div className="space-y-4">
-          {/* Hint / instruction card */}
+          {/* Live guidance */}
           <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-300">
             <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">
               Live guidance
             </div>
-
             <div className="flex items-center gap-2 mb-3">
               <span
                 className={`inline-block w-2 h-2 rounded-full ${
@@ -248,13 +245,12 @@ export default function SelfieStep({
                   : "No face detected"}
               </span>
             </div>
-
             <div className="rounded-xl bg-slate-900 p-3 text-slate-200 text-sm leading-snug">
               {landmarkStatus.hint}
             </div>
           </div>
 
-          {/* Challenge list — sequential reveal */}
+          {/* Challenge progress */}
           <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-300">
             <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">
               Challenge progress
@@ -321,6 +317,20 @@ export default function SelfieStep({
               />
             </div>
           )}
+
+          {/* Face side photo preview */}
+          {faceSidePhoto && (
+            <div className="rounded-2xl border border-violet-900/50 bg-slate-950 p-3">
+              <div className="mb-2 text-xs uppercase tracking-wide text-violet-400">
+                Face side photo
+              </div>
+              <img
+                src={faceSidePhoto}
+                alt="Face side"
+                className="rounded-2xl w-full"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -332,6 +342,7 @@ export default function SelfieStep({
         >
           Back
         </button>
+
         <button
           onClick={() => void captureSelfie()}
           disabled={!livenessDone}
@@ -341,6 +352,18 @@ export default function SelfieStep({
             ? "Capture selfie & continue →"
             : "Complete all challenges first"}
         </button>
+
+        {/* Face side photo button — only shown after selfie is captured */}
+        {selfieImage && (
+          <button
+            onClick={() => void captureFaceSidePhoto()}
+            className="rounded-2xl bg-violet-600 px-5 py-3 font-medium text-white hover:bg-violet-500 transition-colors"
+          >
+            {faceSidePhoto
+              ? "↺ Retake side photo"
+              : "Capture face side photo →"}
+          </button>
+        )}
       </div>
     </section>
   );

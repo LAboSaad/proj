@@ -2,8 +2,8 @@
 import type { ExtractedFields, Step } from "../../types/kyc";
 
 export const steps: Step[] = [
-  //  { key: "msisdn", label: "Mobile Number" },
-  // { key: "consent", label: "Consent" },
+   { key: "msisdn", label: "Mobile Number" },
+  { key: "consent", label: "Consent" },
   { key: "selfie", label: "Selfie & Liveness" },
   { key: "document", label: "Document Capture" },
   { key: "ocr", label: "OCR & MRZ" },
@@ -28,6 +28,7 @@ export const initialFields: ExtractedFields = {
   MiddleName:"",
   LastName: "",
   Email:"",
+  Address:"",
   IdDocSerialNumber: "",
   Nationality: "",
   BirthDate: "",

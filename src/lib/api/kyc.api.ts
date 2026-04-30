@@ -6,6 +6,7 @@ const kycApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface GenerateOTPResponse {
   Status: string;
@@ -29,12 +30,47 @@ export interface ValidateOTPResponse {
   Data: null | object;
 }
 
+export interface SIMRegistrationPayload {
+  FirstName: string;
+  MiddleName: string;
+  LastName: string;
+  Gender: string;
+  BirthDate: string;
+  Address: string;
+  Language: string;
+  Email: string;
+  Nationality: string;
+  FaceFrontPhoto_b64: string;
+  FaceSidePhoto_b64: string;
+  IdDocType: string;
+  IdDocSerialNumber: string;
+  NationalIdNumber: string;
+  IdDocFontPhoto_b64: string;
+  IdDocRearPhoto_b64: string;
+  SIMType: string;
+  ICC: string;
+  IMSI: string;
+  MSISDNType: string;
+  MSISDN: string;
+  MobileMoney_Registration: boolean;
+}
 
-export async function apiGenerateOTP(msisdn: string): Promise<GenerateOTPResponse> {
+export interface SIMRegistrationResponse {
+  Status: string;
+  StatusCode: number;
+  StatusDescription: string;
+  Data: null | object;
+}
+
+// ── OTP ───────────────────────────────────────────────────────────────────────
+
+export async function apiGenerateOTP(
+  msisdn: string,
+): Promise<GenerateOTPResponse> {
   const { data } = await kycApi.post<GenerateOTPResponse>(
     `/HTTP_GenerateRegistrationOTP/`,
     null,
-    { params: { msisdn } }
+    { params: { msisdn } },
   );
   return data;
 }
@@ -42,12 +78,31 @@ export async function apiGenerateOTP(msisdn: string): Promise<GenerateOTPRespons
 export async function apiValidateOTP(
   msisdn: string,
   otp: string,
-  token: string
+  token: string,
 ): Promise<ValidateOTPResponse> {
   const { data } = await kycApi.post<ValidateOTPResponse>(
     `/HTTP_ValidateRegistrationOTP/`,
     { MSISDN: msisdn, OTP: otp },
-    { headers: { Authorization: `Bearer ${token}` } }
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return data;
+}
+
+// ── SIM Registration ──────────────────────────────────────────────────────────
+
+export async function apiSubmitSIMRegistration(
+  payload: SIMRegistrationPayload,
+  token: string,
+): Promise<SIMRegistrationResponse> {
+  const { data } = await kycApi.post<SIMRegistrationResponse>(
+    `/HTTP_FCDM_SIMRegistration_Add/`,
+    payload,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        SourceApp: "",
+      },
+    },
   );
   return data;
 }

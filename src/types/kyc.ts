@@ -26,6 +26,7 @@ export type ExtractedFields = {
   MiddleName: string;
   LastName: string;
   Email: string;
+  Address: string;
   IdDocSerialNumber: string;
   Nationality: string;
   BirthDate: string;
@@ -79,6 +80,7 @@ export type SubmissionPayload = {
   capturedAt: string;
   images: {
     selfie: string;
+    FaceSidePhoto_b64: string;
     IdDocFontPhoto_b64: string;
     IdDocRearPhoto_b64: string;
   };

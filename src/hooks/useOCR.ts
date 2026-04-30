@@ -227,6 +227,7 @@ export function useOCR({
 
           MiddleName: (d.MiddleName || "").replace(/</g, " ").trim(),
           Email: (d.Email || "").replace(/</g, " ").trim(),
+          Address: (d.Address || "").replace(/</g, " ").trim(),
 
           IdDocSerialNumber: (d.documentNumber || "").replace(/</g, "").trim(),
           Nationality: (d.nationality || "").trim(),

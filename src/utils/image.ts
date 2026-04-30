@@ -120,13 +120,13 @@ export function transformToBackendPayload(
 
     BirthDate: formatDate(payload.ocr.BirthDate),
 
-    Address: "Luanda",
+    Address: payload.ocr.Address || "",
     Language: language, // ← from i18next
 
     Nationality: payload.ocr.Nationality || "",
 
     FaceFrontPhoto_b64: payload.images.selfie || "",
-    FaceSidePhoto_b64: "",
+    FaceSidePhoto_b64: payload.images.FaceSidePhoto_b64 || "",
 
     IdDocType: "National ID",
 

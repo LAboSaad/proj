@@ -29,6 +29,8 @@ export function mapFieldKey(label: string): keyof ExtractedFields {
       return "LastName";
     case "Email":
       return "Email";
+    case "Address":
+      return "Address";
     case "Document number":
       return "IdDocSerialNumber";
     case "Nationality":

@@ -72,7 +72,13 @@ export default function App(): JSX.Element {
   });
 
   // ── selfie ────────────────────────────────────────────────────────
-  const { selfieImage, captureSelfie, resetSelfie } = useSelfie({
+  const {
+    selfieImage,
+    faceSidePhoto,
+    captureSelfie,
+    captureFaceSidePhoto,
+    resetSelfie,
+  } = useSelfie({
     webcamRef: selfieWebcamRef,
     livenessDone,
     pushError,
@@ -132,6 +138,7 @@ export default function App(): JSX.Element {
       buildPayload({
         consentAccepted: agreed,
         selfieImage,
+        faceSidePhoto,
         documentImage,
         documentBackImage,
         livenessDone,
@@ -146,6 +153,7 @@ export default function App(): JSX.Element {
     [
       agreed,
       selfieImage,
+      faceSidePhoto,
       documentImage,
       documentBackImage,
       livenessDone,
@@ -164,7 +172,6 @@ export default function App(): JSX.Element {
     [internalPayload, msisdn],
   );
 
-  console.log("internalPayload", internalPayload);
 
   // ── reset all ─────────────────────────────────────────────────────
   const handleReset = () =>
@@ -191,9 +198,6 @@ export default function App(): JSX.Element {
     URL.revokeObjectURL(url);
   };
 
-  const submitToBackendBoundary = async () => {
-    alert("Payload ready. Replace this with your backend POST.");
-  };
 
   // ── render ────────────────────────────────────────────────────────
   return (
@@ -246,6 +250,8 @@ export default function App(): JSX.Element {
                 captureSelfie={captureSelfie}
                 prevStep={prevStep}
                 selfieImage={selfieImage}
+                faceSidePhoto={faceSidePhoto}
+                captureFaceSidePhoto={captureFaceSidePhoto}
                 livenessChallenge={livenessChallenge}
                 challengeSequence={challengeSequence}
                 challengeIndex={challengeIndex}
@@ -306,7 +312,6 @@ export default function App(): JSX.Element {
                 backendPayload={backendPayload}
                 prevStep={prevStep}
                 exportPayloadFile={exportPayloadFile}
-                submitToBackendBoundary={submitToBackendBoundary}
                 resetFlow={handleReset}
               />
             )}

@@ -25,6 +25,7 @@ export default function OCRStep({
           ["Middle name", fields.MiddleName],
           ["Last name", fields.LastName],
           ["Email", fields.Email],
+          ["Address", fields.Address],
           ["Document number", fields.IdDocSerialNumber],
           ["Nationality", fields.Nationality],
           ["Birth date", fields.BirthDate],

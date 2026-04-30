@@ -9,6 +9,7 @@ import type { LivenessChallenge } from "../constants/kyc.constants";
 export function buildPayload(args: {
   consentAccepted: boolean;
   selfieImage: string;
+  faceSidePhoto: string;
   documentImage: string;
   documentBackImage: string;
   livenessDone: boolean;
@@ -23,6 +24,7 @@ export function buildPayload(args: {
   const {
     consentAccepted,
     selfieImage,
+    faceSidePhoto,
     documentImage,
     documentBackImage,
     livenessDone,
@@ -51,6 +53,7 @@ export function buildPayload(args: {
     capturedAt: new Date().toISOString(),
     images: {
       selfie: selfieImage,
+      FaceSidePhoto_b64: faceSidePhoto,
       IdDocFontPhoto_b64: documentImage,
       IdDocRearPhoto_b64: documentBackImage,
     },
