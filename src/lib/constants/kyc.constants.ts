@@ -2,8 +2,8 @@
 import type { ExtractedFields, Step } from "../../types/kyc";
 
 export const steps: Step[] = [
-   { key: "msisdn", label: "Mobile Number" },
-  { key: "consent", label: "Consent" },
+  //  { key: "msisdn", label: "Mobile Number" },
+  // { key: "consent", label: "Consent" },
   { key: "selfie", label: "Selfie & Liveness" },
   { key: "document", label: "Document Capture" },
   { key: "ocr", label: "OCR & MRZ" },
@@ -47,12 +47,6 @@ export type LivenessChallenge =
   | "nodHead"
   | "moveCloser"
 
-export type LandmarkStatus = {
-  faceDetected: boolean;
-  yawEstimate: number;
-  qualityOk: boolean;
-  hint: string;
-};
 
 export type FaceMatchResult = {
   distance: number;

@@ -14,8 +14,11 @@ export function variance(values: number[]): number {
   return mean(values.map((value) => (value - avg) ** 2));
 }
 
+// Replace similarityFromDistance with this:
 export function similarityFromDistance(distance: number): number {
-  const similarity = Math.max(0, Math.min(1, 1 - distance / 0.9));
+  // Centered at 0.55 (slightly above threshold) so near-matches
+  // display as a reasonable percentage rather than collapsing to ~30%
+  const similarity = 1 / (1 + Math.exp((distance - 0.55) * 10));
   return Number((similarity * 100).toFixed(2));
 }
 

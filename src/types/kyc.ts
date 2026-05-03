@@ -44,11 +44,19 @@ export type FaceMatchResult = {
   status: "pass" | "review";
 };
 
+export type FaceBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+ 
 export type LandmarkStatus = {
   faceDetected: boolean;
   yawEstimate: number;
   qualityOk: boolean;
   hint: string;
+  faceBox: FaceBox | null; // bounding box in VIDEO pixel space (from face-api.js)
 };
 
 export type DocumentQuality = {

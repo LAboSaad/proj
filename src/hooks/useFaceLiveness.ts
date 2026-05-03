@@ -91,6 +91,7 @@ export function useFaceLiveness({
     yawEstimate: 0,
     qualityOk: false,
     hint: "Center your face inside the frame.",
+    faceBox: null, // ← NEW
   });
 
   // ── Derived ────────────────────────────────────────────────────────────────
@@ -144,8 +145,6 @@ export function useFaceLiveness({
   );
 
   // ── Advance to next challenge ──────────────────────────────────────────────
-  // NOTE: side capture is now done INSIDE the switch before calling this,
-  // so advanceChallenge itself no longer calls onSideCaptured.
   const advanceChallenge = useCallback(
     (
       passed: boolean,
@@ -216,6 +215,7 @@ export function useFaceLiveness({
       yawEstimate: 0,
       qualityOk: false,
       hint: "Center your face inside the frame.",
+      faceBox: null, // ← NEW
     });
     setPhase("detecting");
     phaseRef.current = "detecting";
@@ -248,6 +248,7 @@ export function useFaceLiveness({
           setLandmarkStatus((prev) => ({
             ...prev,
             faceDetected: false,
+            faceBox: null, // ← NEW
             hint: "Only one person should be in frame.",
           }));
           if (currentPhase === "ready") {
@@ -258,9 +259,19 @@ export function useFaceLiveness({
         }
 
         const faceDetected = detections?.length === 1;
+
+        // ── NEW: extract faceBox from detection ────────────────────────────
+        const rawBox = faceDetected
+          ? detections[0].detection.box
+          : null;
+        const faceBox = rawBox
+          ? { x: rawBox.x, y: rawBox.y, width: rawBox.width, height: rawBox.height }
+          : null;
+
         setLandmarkStatus((prev) => ({
           ...prev,
           faceDetected,
+          faceBox, // ← NEW
           hint: faceDetected
             ? "Face detected! Click 'I'm Ready' to begin."
             : "Center your face inside the frame.",
@@ -313,6 +324,7 @@ export function useFaceLiveness({
           yawEstimate: 0,
           qualityOk: false,
           hint: "No face detected. Move closer or improve lighting.",
+          faceBox: null, // ← NEW
         });
         return;
       }
@@ -323,6 +335,7 @@ export function useFaceLiveness({
           yawEstimate: 0,
           qualityOk: false,
           hint: "Only one person should be in frame.",
+          faceBox: null, // ← NEW
         });
         return;
       }
@@ -333,6 +346,15 @@ export function useFaceLiveness({
       const gestureFrame = areGestureModelsLoaded()
         ? detectGestures(video)
         : null;
+
+      // ── NEW: extract faceBox in challenging phase ──────────────────────
+      const rawBox = detection.detection.box;
+      const faceBox = {
+        x: rawBox.x,
+        y: rawBox.y,
+        width: rawBox.width,
+        height: rawBox.height,
+      };
 
       const config = CHALLENGE_CONFIGS[currentChallenge];
       let hint = config.instruction;
@@ -364,6 +386,7 @@ export function useFaceLiveness({
             hint = "✓ Good!";
           }
           break;
+
         case "moveCloser": {
           const ratio = computeFaceSizeRatio(
             detection,
@@ -414,12 +437,12 @@ export function useFaceLiveness({
         yawEstimate: Number(yaw.toFixed(4)),
         qualityOk,
         hint,
+        faceBox, // ← NEW
       });
     } catch (err) {
       console.error("Face detection error:", err);
     }
   }, [modelsLoaded, webcamRef, detectNod]);
-  // onSideCaptured is intentionally excluded — accessed via onSideCapturedRef
 
   // ── Detection interval ────────────────────────────────────────────────────
   useEffect(() => {
@@ -464,6 +487,7 @@ export function useFaceLiveness({
       yawEstimate: 0,
       qualityOk: false,
       hint: "Center your face inside the frame.",
+      faceBox: null, // ← NEW
     });
   }, [clearChallengeTimer, challengeCount]);
 
