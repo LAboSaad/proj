@@ -7,7 +7,7 @@
 // server-side liveness analysis.
 
 import { dataUrlToImage, getCanvasFromImage } from "../../utils/image";
-import { mean, variance } from "../utils";
+import {variance } from "../utils";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

@@ -30,7 +30,6 @@ import Stepper from "./components/layout/Stepper";
 import MSISDNStep from "./components/steps/MSISDNStep";
 import ConsentStep from "./components/steps/ConsentStep";
 import SelfieStep from "./components/steps/selfieStep/SelfieStep";
-import DocumentStep from "./components/steps/DocumentStep";
 import OCRStep from "./components/steps/OCRStep";
 import FaceMatchStep from "./components/steps/FaceMatchStep";
 import ReviewStep from "./components/steps/ReviewStep";
@@ -38,6 +37,7 @@ import { LanguageSwitcher } from "./components/layout/LanguageSwitcher";
 
 import { transformToBackendPayload } from "./utils/image";
 import type { SessionPatch } from "./lib/services/session.service";
+import DocumentStep from "./components/steps/document/DocumentStep";
 
 // ── Auto-save helper ──────────────────────────────────────────────────────────
 // Consolidates the rehydration guard so it isn't copy-pasted across 10 effects.
