@@ -6,6 +6,7 @@ import Webcam from "react-webcam";
 
 import { useKYCFlow } from "./hooks/useKYCFlow";
 import { useModels } from "./hooks/useModels";
+import { useSessionTimers } from "./hooks/useSessionTimers";
 import { useSelfie } from "./hooks/useSelfie";
 import { useDocument } from "./hooks/useDocument";
 import { useOCR } from "./hooks/useOCR";
@@ -14,11 +15,15 @@ import { useFaceLiveness } from "./hooks/useFaceLiveness";
 
 import { buildPayload } from "./lib/services/payload.service";
 import {
+  loadSession,
+  saveSession,
+  startExpiryWatcher,
+} from "./lib/services/session.service";
+import {
   videoConstraints,
   docVideoConstraints,
   steps,
 } from "./lib/constants/kyc.constants";
-import { loadSession, saveSession, startExpiryWatcher } from "./lib/services/session.service";
 
 import Header from "./components/layout/Header";
 import Stepper from "./components/layout/Stepper";
@@ -29,20 +34,40 @@ import DocumentStep from "./components/steps/DocumentStep";
 import OCRStep from "./components/steps/OCRStep";
 import FaceMatchStep from "./components/steps/FaceMatchStep";
 import ReviewStep from "./components/steps/ReviewStep";
-
 import { LanguageSwitcher } from "./components/layout/LanguageSwitcher";
+
 import { transformToBackendPayload } from "./utils/image";
-import { useSessionTimers } from "./hooks/useSessionTimers";
+import type { SessionPatch } from "./lib/services/session.service";
+
+// ── Auto-save helper ──────────────────────────────────────────────────────────
+// Consolidates the rehydration guard so it isn't copy-pasted across 10 effects.
+// Only saves once the mount rehydration has completed (isRehydrating.current = false).
+
+function useSaveSession(
+  patch: SessionPatch,
+  isRehydrating: React.RefObject<boolean>,
+  deps: unknown[],
+) {
+  useEffect(() => {
+    if (isRehydrating.current) return;
+    saveSession(patch);
+    // deps drives when this fires — patch is intentionally not in the array
+    // because we only want to save when the underlying values change, not
+    // when the object reference changes on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function App(): JSX.Element {
   const selfieWebcamRef = useRef<Webcam | null>(null);
   const docWebcamRef = useRef<Webcam | null>(null);
 
-  // ── Rehydration guard ─────────────────────────────────────────────────────
-  // Prevents save-watchers from overwriting restored session data on mount.
+  // Prevents auto-save watchers from overwriting restored session data on mount.
   const isRehydrating = useRef(true);
 
-  // ── flow & error ──────────────────────────────────────────────────────────
+  // ── Flow ──────────────────────────────────────────────────────────────────
   const {
     stepIndex,
     activeStep,
@@ -56,10 +81,18 @@ export default function App(): JSX.Element {
     resetFlow,
   } = useKYCFlow();
 
-  // ── model loading ─────────────────────────────────────────────────────────
+  // ── Models ────────────────────────────────────────────────────────────────
   const { modelsLoaded } = useModels(pushError);
 
-  // ── liveness ──────────────────────────────────────────────────────────────
+  // ── Session timers ────────────────────────────────────────────────────────
+  // Reads only from localStorage — no dependency on any React state.
+  const timers = useSessionTimers();
+
+  // ── MSISDN ────────────────────────────────────────────────────────────────
+  // Declared before the rehydration effect so setMsisdn is available when it runs.
+  const [msisdn, setMsisdn] = useState("");
+
+  // ── Liveness ──────────────────────────────────────────────────────────────
   const {
     phase,
     landmarkStatus,
@@ -79,10 +112,7 @@ export default function App(): JSX.Element {
     challengeCount: 3,
   });
 
-  // src/App.tsx — updated hook destructuring + rehydration block only
-  // Everything else stays identical to the previous version.
-
-  // ── selfie — destructure setFaceSidePhoto ────────────────────────────────────
+  // ── Selfie ────────────────────────────────────────────────────────────────
   const {
     selfieImage,
     faceSidePhoto,
@@ -91,7 +121,7 @@ export default function App(): JSX.Element {
     captureFaceSidePhoto,
     resetSelfie,
     setSelfieImage,
-    setFaceSidePhoto, // ← add this
+    setFaceSidePhoto,
   } = useSelfie({
     webcamRef: selfieWebcamRef,
     livenessDone,
@@ -103,39 +133,7 @@ export default function App(): JSX.Element {
     nextStep,
   });
 
-  // ── Rehydrate on mount ────────────────────────────────────────────────────────
-  useEffect(() => {
-    const s = loadSession();
-
-    if (s) {
-      if (s.msisdn) setMsisdn(s.msisdn);
-      if (s.selfieImage) setSelfieImage(s.selfieImage);
-      if (s.faceSidePhoto) setFaceSidePhoto(s.faceSidePhoto); // ← add this
-
-      rehydrateDocument({
-        documentImage: s.documentImage,
-        documentBackImage: s.documentBackImage,
-        documentQuality: s.documentQuality,
-        documentBackQuality: s.documentBackQuality,
-      });
-
-      rehydrateOCR({
-        fields: s.fields,
-        mrzValid: s.mrzValid,
-        mrzMessage: s.mrzMessage,
-      });
-
-      rehydrateFaceMatch({ faceMatch: s.faceMatch });
-    }
-
-    requestAnimationFrame(() => {
-      isRehydrating.current = false;
-    });
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── document ──────────────────────────────────────────────────────────────
+  // ── Document ──────────────────────────────────────────────────────────────
   const {
     documentImage,
     documentQuality,
@@ -165,7 +163,7 @@ export default function App(): JSX.Element {
     resetOCR,
   } = useOCR({ documentImage, pushError, clearError, nextStep });
 
-  // ── face match ────────────────────────────────────────────────────────────
+  // ── Face match ────────────────────────────────────────────────────────────
   const {
     faceMatch,
     busy: matchBusy,
@@ -180,18 +178,17 @@ export default function App(): JSX.Element {
     nextStep,
   });
 
-  const timers = useSessionTimers();
-  // ── MSISDN ────────────────────────────────────────────────────────────────
-  const [msisdn, setMsisdn] = useState("");
-  const [isEligible, setIsEligible] = useState<boolean | null>(null);
-
-  // ── Rehydrate on mount (runs once, before watchers activate) ─────────────
+  // ── Rehydration ───────────────────────────────────────────────────────────
+  // Single effect, single loadSession() call.
+  // requestAnimationFrame ensures all batched setState calls above have
+  // committed before auto-save watchers are allowed to fire.
   useEffect(() => {
     const s = loadSession();
 
     if (s) {
       if (s.msisdn) setMsisdn(s.msisdn);
       if (s.selfieImage) setSelfieImage(s.selfieImage);
+      if (s.faceSidePhoto) setFaceSidePhoto(s.faceSidePhoto);
 
       rehydrateDocument({
         documentImage: s.documentImage,
@@ -209,9 +206,6 @@ export default function App(): JSX.Element {
       rehydrateFaceMatch({ faceMatch: s.faceMatch });
     }
 
-    // Allow save-watchers to start firing after this tick.
-    // requestAnimationFrame ensures all the setState calls above have
-    // been batched and committed before we lift the guard.
     requestAnimationFrame(() => {
       isRehydrating.current = false;
     });
@@ -219,65 +213,29 @@ export default function App(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount only
 
+  // ── Expiry watcher ────────────────────────────────────────────────────────
+  // Registered immediately after rehydration — cleans up both the KYC session
+  // and the OTP token when their 15-min TTL elapses.
+  useEffect(() => startExpiryWatcher(), []);
+
   // ── Auto-save watchers ────────────────────────────────────────────────────
-  // Each watcher skips the first render while rehydration is in progress.
-  useEffect(() => {
-    if (isRehydrating.current) return;
-    saveSession({ msisdn });
-  }, [msisdn]);
+  // Each patch is saved independently so unrelated state changes don't trigger
+  // a full-session write. The rehydration guard is enforced inside useSaveSession.
+  useSaveSession({ msisdn }, isRehydrating, [msisdn]);
+  useSaveSession({ selfieImage }, isRehydrating, [selfieImage]);
+  useSaveSession({ faceSidePhoto }, isRehydrating, [faceSidePhoto]);
+  useSaveSession({ documentImage }, isRehydrating, [documentImage]);
+  useSaveSession({ documentBackImage }, isRehydrating, [documentBackImage]);
+  useSaveSession({ documentQuality }, isRehydrating, [documentQuality]);
+  useSaveSession({ documentBackQuality }, isRehydrating, [documentBackQuality]);
+  useSaveSession({ fields }, isRehydrating, [fields]);
+  useSaveSession({ mrzValid, mrzMessage }, isRehydrating, [
+    mrzValid,
+    mrzMessage,
+  ]);
+  useSaveSession({ faceMatch }, isRehydrating, [faceMatch]);
 
-  useEffect(() => {
-    if (isRehydrating.current) return;
-    saveSession({ selfieImage });
-  }, [selfieImage]);
-
-  useEffect(() => {
-    if (isRehydrating.current) return;
-    saveSession({ faceSidePhoto });
-  }, [faceSidePhoto]);
-
-  useEffect(() => {
-    if (isRehydrating.current) return;
-    saveSession({ documentImage });
-  }, [documentImage]);
-
-  useEffect(() => {
-    if (isRehydrating.current) return;
-    saveSession({ documentBackImage });
-  }, [documentBackImage]);
-
-  useEffect(() => {
-    if (isRehydrating.current) return;
-    saveSession({ documentQuality });
-  }, [documentQuality]);
-
-  useEffect(() => {
-    if (isRehydrating.current) return;
-    saveSession({ documentBackQuality });
-  }, [documentBackQuality]);
-
-  useEffect(() => {
-    if (isRehydrating.current) return;
-    saveSession({ fields });
-  }, [fields]);
-
-  useEffect(() => {
-    if (isRehydrating.current) return;
-    saveSession({ mrzValid, mrzMessage });
-  }, [mrzValid, mrzMessage]);
-
-  useEffect(() => {
-    if (isRehydrating.current) return;
-    saveSession({ faceMatch });
-  }, [faceMatch]);
-  // Inside App() component, after all hooks
-
-  useEffect(() => {
-    const cleanup = startExpiryWatcher();
-    return cleanup;
-  }, []);
-
-  // ── payload ───────────────────────────────────────────────────────────────
+  // ── Payload ───────────────────────────────────────────────────────────────
   const internalPayload = useMemo(
     () =>
       buildPayload({
@@ -317,7 +275,7 @@ export default function App(): JSX.Element {
     [internalPayload, msisdn],
   );
 
-  // ── reset all ─────────────────────────────────────────────────────────────
+  // ── Reset ─────────────────────────────────────────────────────────────────
   const handleReset = () =>
     resetFlow(() => {
       resetSelfie();
@@ -326,10 +284,9 @@ export default function App(): JSX.Element {
       resetFaceMatch();
       resetLiveness();
       setMsisdn("");
-      setIsEligible(null);
     });
 
-  // ── export payload ────────────────────────────────────────────────────────
+  // ── Export payload ────────────────────────────────────────────────────────
   const exportPayloadFile = () => {
     const blob = new Blob([JSON.stringify(backendPayload, null, 2)], {
       type: "application/json",
@@ -342,10 +299,11 @@ export default function App(): JSX.Element {
     URL.revokeObjectURL(url);
   };
 
-  // ── render ────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen px-20 bg-[#a11775] flex justify-center flex-col text-slate-100">
       <LanguageSwitcher timers={timers} />
+
       <div className="mx-auto max-w-7xl flex flex-col justify-center sm:py-10 py-3">
         <Header
           modelsLoaded={modelsLoaded}
@@ -368,9 +326,7 @@ export default function App(): JSX.Element {
               <MSISDNStep
                 msisdn={msisdn}
                 setMsisdn={setMsisdn}
-                setIsEligible={setIsEligible}
                 nextStep={nextStep}
-                isEligible={isEligible}
               />
             )}
 

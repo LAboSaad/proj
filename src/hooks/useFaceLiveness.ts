@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
 import Webcam from "react-webcam";
 
-import type { LandmarkStatus } from "../types/kyc";
-import type { LivenessChallenge } from "../lib/constants/kyc.constants";
+import type { LandmarkStatus, LivenessChallenge } from "../types/kyc";
 
 import {
   computeFaceQuality,

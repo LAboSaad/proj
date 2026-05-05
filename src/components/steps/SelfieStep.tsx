@@ -1,9 +1,8 @@
 import Webcam from "react-webcam";
-import type { LivenessChallenge } from "../../lib/constants/kyc.constants";
 import { CHALLENGE_CONFIGS } from "../../lib/challenges";
 import type { LivenessPhase } from "../../hooks/useFaceLiveness";
 import type { CaptureStatus } from "../../hooks/useSelfie";
-import type { FaceBox } from "../../types/kyc";
+import type { FaceBox, LivenessChallenge } from "../../types/kyc";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

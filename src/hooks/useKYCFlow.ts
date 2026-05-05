@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { steps } from "../lib/constants/kyc.constants";
 import { loadSession, saveSession, clearSession } from "../lib/services/session.service";
+import { isOTPTokenValid } from "../lib/services/msisdn.service";
 import type { AppError, StepKey } from "../types/kyc";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface UseKYCFlowReturn {
   stepIndex: number;
@@ -18,6 +21,8 @@ interface UseKYCFlowReturn {
   resetFlow: (extras?: () => void) => void;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function resolveInitialIndex(): number {
   const session = loadSession();
   if (!session) return 0;
@@ -25,12 +30,18 @@ function resolveInitialIndex(): number {
   return idx >= 0 ? idx : 0;
 }
 
+// Steps that require a valid OTP token to proceed.
+// Step 0 (msisdn) is excluded — it's the destination we redirect back to.
+const STEPS_REQUIRING_TOKEN = new Set(
+  steps.slice(1).map((s) => s.key),
+);
+
+// ── Hook ──────────────────────────────────────────────────────────────────────
+
 export function useKYCFlow(): UseKYCFlowReturn {
   const [stepIndex, setStepIndex] = useState(resolveInitialIndex);
   const [error, setError] = useState<AppError | null>(null);
-  const [agreed, setAgreedState] = useState(() => {
-    return loadSession()?.agreed ?? false;
-  });
+  const [agreed, setAgreedState] = useState(() => loadSession()?.agreed ?? false);
 
   // Persist step key whenever stepIndex changes
   useEffect(() => {
@@ -50,9 +61,25 @@ export function useKYCFlow(): UseKYCFlowReturn {
   const clearError = useCallback(() => setError(null), []);
 
   const nextStep = useCallback(() => {
+    const currentKey = steps[stepIndex]?.key;
+
+    // Guard: if the current step requires a valid token and it has expired,
+    // redirect to step 0 (msisdn) with a clear explanation.
+    // msisdn is intentionally NOT cleared — the input stays pre-filled so
+    // the user only needs to re-verify, not re-type their number.
+    if (STEPS_REQUIRING_TOKEN.has(currentKey) && !isOTPTokenValid()) {
+      setStepIndex(0);
+      setError({
+        scope: "Session expired",
+        message:
+          "Your verification session has expired. Please re-enter your number to receive a new code.",
+      });
+      return;
+    }
+
     clearError();
     setStepIndex((prev) => Math.min(prev + 1, steps.length - 1));
-  }, [clearError]);
+  }, [stepIndex, clearError]);
 
   const prevStep = useCallback(() => {
     clearError();

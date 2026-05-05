@@ -1,5 +1,6 @@
 // src/lib/challenges.ts
-import type { ChallengeConfig, LivenessChallenge } from "./constants/kyc.constants";
+
+import type { ChallengeConfig, LivenessChallenge } from "../types/kyc";
 
 export const CHALLENGE_CONFIGS: Record<LivenessChallenge, ChallengeConfig> = {
   center: {

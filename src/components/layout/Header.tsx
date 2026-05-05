@@ -4,7 +4,7 @@ type Props = {
   activeStepLabel: string;
 };
 
-export default function Header({ modelsLoaded, activeStepLabel }: Props) {
+export default function Header({ activeStepLabel }: Props) {
   return (
     <div className="mb-8 flex flex-col  gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div>

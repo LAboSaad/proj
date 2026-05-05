@@ -1,5 +1,3 @@
-import type { LivenessChallenge } from "../lib/constants/kyc.constants";
-
 export type StepKey =
   | "msisdn"
   | "consent"
@@ -14,26 +12,42 @@ export type Step = {
   label: string;
 };
 
-// export type LivenessChallenge = "center" | "lookLeft" | "lookRight";
-
 export type AppError = {
   scope: string;
   message: string;
 };
 
-export type ExtractedFields = {
-  FirstName: string;
-  MiddleName: string;
-  LastName: string;
-  Email: string;
-  Address: string;
-  IdDocSerialNumber: string;
-  Nationality: string;
-  BirthDate: string;
-  ExpiryDate: string;
-  Gender: string;
-  rawMRZ: string;
-  rawOCRText: string;
+export type LivenessChallenge =
+  | "center"
+  | "lookLeft"
+  | "lookRight"
+  | "raiseLeftHand"
+  | "raiseRightHand"
+  | "nodHead"
+  | "moveCloser";
+
+export type ChallengeConfig = {
+  id: LivenessChallenge;
+  label: string;
+  instruction: string;
+  icon: string;
+  requiresHand: boolean;
+  requiresPose: boolean;
+};
+
+export type FaceBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type LandmarkStatus = {
+  faceDetected: boolean;
+  yawEstimate: number;
+  qualityOk: boolean;
+  hint: string;
+  faceBox: FaceBox | null;
 };
 
 export type FaceMatchResult = {
@@ -44,20 +58,7 @@ export type FaceMatchResult = {
   status: "pass" | "review";
 };
 
-export type FaceBox = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
- 
-export type LandmarkStatus = {
-  faceDetected: boolean;
-  yawEstimate: number;
-  qualityOk: boolean;
-  hint: string;
-  faceBox: FaceBox | null; // bounding box in VIDEO pixel space (from face-api.js)
-};
+// ── Document ──────────────────────────────────────────────────────────────────
 
 export type DocumentQuality = {
   width: number;
@@ -75,6 +76,23 @@ export type DocumentQuality = {
   reasons: string[];
 };
 
+// ── OCR ───────────────────────────────────────────────────────────────────────
+
+export type ExtractedFields = {
+  FirstName: string;
+  MiddleName: string;
+  LastName: string;
+  Email: string;
+  Address: string;
+  IdDocSerialNumber: string;
+  Nationality: string;
+  BirthDate: string;
+  ExpiryDate: string;
+  Gender: string;
+  rawMRZ: string;
+  rawOCRText: string;
+};
+
 export type OcrRunResult = {
   rawOCRText: string;
   rawMRZ: string;
@@ -82,6 +100,8 @@ export type OcrRunResult = {
   mrzMessage: string;
   fields: ExtractedFields;
 };
+
+// ── Submission ────────────────────────────────────────────────────────────────
 
 export type SubmissionPayload = {
   consentAccepted: boolean;
@@ -106,3 +126,25 @@ export type SubmissionPayload = {
   faceMatch: FaceMatchResult | null;
   readyForBackendPost: boolean;
 };
+
+// ── Session ───────────────────────────────────────────────────────────────────
+
+export interface KYCSession {
+  expiresAt: number;
+  stepKey: StepKey;
+  msisdn: string;
+  agreed: boolean;
+  selfieImage: string;
+  faceSidePhoto: string;
+  documentImage: string;
+  documentBackImage: string;
+  documentQuality: DocumentQuality | null;
+  documentBackQuality: DocumentQuality | null;
+  fields: ExtractedFields;
+  mrzValid: boolean | null;
+  mrzMessage: string;
+  faceMatch: FaceMatchResult | null;
+}
+
+/** A partial update — every key except expiresAt is optional. */
+export type SessionPatch = Partial<Omit<KYCSession, "expiresAt">>;

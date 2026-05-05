@@ -1,178 +1,150 @@
-import type {
-  StepKey,
-  ExtractedFields,
-  FaceMatchResult,
-  DocumentQuality,
-} from "../../types/kyc";
-
-const SESSION_KEY    = "kyc_session";
-
-export interface KYCSession {
-  expiresAt: number;
-  stepKey: StepKey;
-  msisdn: string;
-  agreed: boolean;
-  selfieImage: string;
-  faceSidePhoto: string;
-  documentImage: string;
-  documentBackImage: string;
-  documentQuality: DocumentQuality | null;
-  documentBackQuality: DocumentQuality | null;
-  fields: ExtractedFields;
-  mrzValid: boolean | null;
-  mrzMessage: string;
-  faceMatch: FaceMatchResult | null;
-}
-
-export type SessionPatch = Partial<Omit<KYCSession, "expiresAt">>;
-
-const EMPTY_FIELDS: ExtractedFields = {
-  FirstName:         "",
-  MiddleName:        "",
-  LastName:          "",
-  Email:             "",
-  Address:           "",
-  IdDocSerialNumber: "",
-  Nationality:       "",
-  BirthDate:         "",
-  ExpiryDate:        "",
-  Gender:            "",
-  rawMRZ:            "",
-  rawOCRText:        "",
-};
-
-const SESSION_DEFAULTS: Omit<KYCSession, "expiresAt"> = {
-  stepKey:             "msisdn",
-  msisdn:              "",
-  agreed:              false,
-  selfieImage:         "",
-  faceSidePhoto:       "",
-  documentImage:       "",
-  documentBackImage:   "",
-  documentQuality:     null,
-  documentBackQuality: null,
-  fields:              EMPTY_FIELDS,
-  mrzValid:            null,
-  mrzMessage:          "",
-  faceMatch:           null,
-};
+import type { KYCSession, SessionPatch } from "../../types/kyc";
+import { STORAGE_KEYS, SESSION_DEFAULTS } from "../constants/kyc.constants";
+export type { KYCSession, SessionPatch };
 
 // ── KYC Session ───────────────────────────────────────────────────────────────
 
+/**
+ * Returns the current session if it exists and has not expired.
+ * Automatically clears an expired session so callers never receive stale data.
+ */
 export function loadSession(): KYCSession | null {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    const raw = localStorage.getItem(STORAGE_KEYS.SESSION);
     if (!raw) return null;
-    const session: KYCSession = JSON.parse(raw);
+
+    const session = JSON.parse(raw) as KYCSession;
+
     if (Date.now() > session.expiresAt) {
       clearSession();
       return null;
     }
+
     return session;
   } catch {
+    // Corrupted JSON — clear and start fresh
+    clearSession();
     return null;
   }
 }
 
 /**
  * Creates a brand-new KYC session anchored to the given expiresAt.
- * Always wipes any existing session first so the expiry is never inherited.
- * Called once from generateOTP so both timers share the same birth moment.
+ *
+ * Always wipes any existing session first so the expiry is never inherited
+ * from a previous flow. Called once from generateOTP() so the session and
+ * OTP token share an identical birth moment and TTL.
  */
 export function createSession(patch: SessionPatch, expiresAt: number): void {
   try {
-    // Always start fresh — never inherit a stale expiresAt
-    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(STORAGE_KEYS.SESSION);
+
     const next: KYCSession = {
       ...SESSION_DEFAULTS,
       ...patch,
       expiresAt,
     };
-    localStorage.setItem(SESSION_KEY, JSON.stringify(next));
+
+    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(next));
   } catch {
-    // quota exceeded or private mode — fail silently
+    // Quota exceeded or private-browsing restriction — fail silently.
+    // The flow still works; the session just won't survive a page refresh.
   }
 }
 
 /**
- * Patches an existing session without ever touching expiresAt.
- * If no session exists yet (e.g. called before OTP), it is a no-op
- * so we never accidentally create a session with the wrong expiry.
+ * Merges a partial update into the existing session without touching expiresAt.
+ *
+ * If no session exists yet (e.g. called before generateOTP has run) this is a
+ * deliberate no-op — we must never create a session with a missing or wrong
+ * expiresAt, because that would break the shared-TTL contract with the OTP token.
  */
 export function saveSession(patch: SessionPatch): void {
   try {
     const existing = loadSession();
-    if (!existing) return; // no session yet — wait for createSession
+    if (!existing) return;
+
     const next: KYCSession = {
       ...existing,
       ...patch,
-      expiresAt: existing.expiresAt, // never overwrite
+      expiresAt: existing.expiresAt, // immutable — set only by createSession
     };
-    localStorage.setItem(SESSION_KEY, JSON.stringify(next));
+
+    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(next));
   } catch {
-    // quota exceeded or private mode — fail silently
+    // Quota exceeded or private-browsing restriction — fail silently.
   }
 }
 
+/** Removes the session from localStorage unconditionally. */
 export function clearSession(): void {
-  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(STORAGE_KEYS.SESSION);
 }
 
-// ── OTP token ─────────────────────────────────────────────────────────────────
-
-const OTP_TOKEN_KEY = "kyc_otp_token";
+// ── OTP token ─────
+// Full OTP token logic lives in msisdn.service.
+// These helpers exist only so startExpiryWatcher() can clear the token
+// without importing msisdn.service (which would create a circular dependency).
 
 export function clearOTPTokenFromStorage(): void {
-  localStorage.removeItem(OTP_TOKEN_KEY);
+  localStorage.removeItem(STORAGE_KEYS.OTP_TOKEN);
 }
 
+/**
+ * Returns the OTP token's expiresAt timestamp, or null if absent / expired.
+ * Used only by the expiry watcher and useSessionTimers.
+ */
 export function getOTPTokenExpiry(): number | null {
   try {
-    const raw = localStorage.getItem(OTP_TOKEN_KEY);
+    const raw = localStorage.getItem(STORAGE_KEYS.OTP_TOKEN);
     if (!raw) return null;
+
     const parsed = JSON.parse(raw) as { token: string; expiresAt: number };
-    if (parsed?.expiresAt && typeof parsed.expiresAt === "number") {
-      return parsed.expiresAt;
-    }
-    return null;
+
+    if (typeof parsed?.expiresAt !== "number") return null;
+
+    return parsed.expiresAt;
   } catch {
     return null;
   }
 }
 
-// ── Unified expiry watcher ────────────────────────────────────────────────────
-// Cleans up both kyc_session and kyc_otp_token when they expire.
-// Call once in App.tsx — returns a cleanup function for useEffect.
+// ── Expiry watcher ────────────────────────────────────────────────────────────
 
 export function startExpiryWatcher(): () => void {
   function runChecks(): void {
-    // KYC session — loadSession() already calls clearSession() if expired
+    // Session — loadSession() handles its own cleanup when expired
     loadSession();
 
-    // OTP token — clear it if its own expiresAt has passed
+    // OTP token — clear independently of the in-memory activeSession
     try {
-      const raw = localStorage.getItem(OTP_TOKEN_KEY);
+      const raw = localStorage.getItem(STORAGE_KEYS.OTP_TOKEN);
       if (!raw) return;
+
       const stored = JSON.parse(raw) as { token: string; expiresAt: number };
+
       if (Date.now() > stored.expiresAt) {
         clearOTPTokenFromStorage();
       }
     } catch {
+      // Corrupted token — remove it
       clearOTPTokenFromStorage();
     }
   }
 
+  // Run immediately so an already-expired session is cleared before first render
   runChecks();
 
-  const interval = window.setInterval(runChecks, 60_000);
+  const intervalId = window.setInterval(runChecks, 60_000);
 
-  const handleVisibility = () => {
+  const handleVisibilityChange = () => {
     if (document.visibilityState === "visible") runChecks();
   };
-  document.addEventListener("visibilitychange", handleVisibility);
+
+  document.addEventListener("visibilitychange", handleVisibilityChange);
 
   return () => {
-    window.clearInterval(interval);
-    document.removeEventListener("visibilitychange", handleVisibility);
+    window.clearInterval(intervalId);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
   };
 }
