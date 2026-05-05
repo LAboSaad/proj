@@ -29,7 +29,7 @@ import Header from "./components/layout/Header";
 import Stepper from "./components/layout/Stepper";
 import MSISDNStep from "./components/steps/MSISDNStep";
 import ConsentStep from "./components/steps/ConsentStep";
-import SelfieStep from "./components/steps/SelfieStep";
+import SelfieStep from "./components/steps/selfieStep/SelfieStep";
 import DocumentStep from "./components/steps/DocumentStep";
 import OCRStep from "./components/steps/OCRStep";
 import FaceMatchStep from "./components/steps/FaceMatchStep";

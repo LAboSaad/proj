@@ -1,35 +1,53 @@
+// src/lib/services/spoof.service.ts
+//
+// Lightweight client-side spoof detection based on pixel variance.
+// Low variance → likely a flat screen or printed photo → flag as spoof.
+//
+// This is a first-pass heuristic only. It is not a substitute for
+// server-side liveness analysis.
+
 import { dataUrlToImage, getCanvasFromImage } from "../../utils/image";
+import { mean, variance } from "../utils";
 
-export async function detectPossibleSpoof(imageDataUrl: string): Promise<boolean> {
-  return new Promise(async (resolve) => {
-    const img = await dataUrlToImage(imageDataUrl);
-    console.log("natural in App:", img.naturalWidth, img.naturalHeight);
-console.log("display in App:", img.width, img.height);
-    const canvas = getCanvasFromImage(img);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return resolve(false);
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+/**
+ * Images with pixel variance below this threshold are considered spoofs.
+ * A real face in varied lighting typically produces variance well above 300.
+ * Screens and prints tend to be flatter, producing variance below this value.
+ */
+const SPOOF_VARIANCE_THRESHOLD = 300;
 
-    let variance = 0;
-    let mean = 0;
-    const values: number[] = [];
+// ── Spoof detection ───────────────────────────────────────────────────────────
 
-    for (let i = 0; i < data.length; i += 4) {
-      const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
-      values.push(gray);
-      mean += gray;
-    }
+/**
+ * Returns true if the image is likely a spoof (screen / printed photo).
+ *
+ * Previously used the async-in-Promise-constructor anti-pattern — if the
+ * inner async threw, the promise would never reject and the caller would hang.
+ * Rewritten as a plain async function to guarantee rejection propagates.
+ *
+ * Also removes the local mean/variance reimplementations — these already
+ * exist in src/lib/utils and are imported directly.
+ */
+export async function detectPossibleSpoof(
+  imageDataUrl: string,
+): Promise<boolean> {
+  const img = await dataUrlToImage(imageDataUrl);
+  const canvas = getCanvasFromImage(img);
+  const ctx = canvas.getContext("2d");
 
-    mean /= values.length;
+  if (!ctx) return false;
 
-    for (const v of values) {
-      variance += (v - mean) ** 2;
-    }
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    variance /= values.length;
+  // Convert pixels to grayscale values
+  const grayValues: number[] = [];
+  for (let i = 0; i < data.length; i += 4) {
+    grayValues.push((data[i] + data[i + 1] + data[i + 2]) / 3);
+  }
 
-    // 🔥 LOW variance = likely screen / printed spoof
-    resolve(variance < 300);
-  });
+  const pixelVariance = variance(grayValues);
+
+  return pixelVariance < SPOOF_VARIANCE_THRESHOLD;
 }
