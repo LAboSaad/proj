@@ -70,7 +70,7 @@ export const OTP_MAX_ATTEMPTS = 3;
  *   • clearOTP() in msisdn.service — called only from the submit action in
  *     ReviewStep after the payload has been successfully sent.
  */
-export const OTP_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
+// export const OTP_TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 // ── Field / session defaults ──────────────────────────────────────────────────
 // `initialFields` is the canonical empty ExtractedFields object.

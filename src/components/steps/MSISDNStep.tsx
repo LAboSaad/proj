@@ -1,15 +1,4 @@
 // src/components/steps/MSISDNStep.tsx
-//
-// Collects and verifies the user's mobile number via OTP.
-//
-//   • verifyCaptchaToken is a clearly-flagged stub (TODO) — always returns true
-//     until the backend /captcha/verify endpoint is available.
-//   • maskedPhone is memoised — not recomputed on every render.
-//   • reCAPTCHA disclaimer extracted into <RecaptchaDisclaimer /> — was duplicated
-//     in both phase branches.
-//   • Phase guards are positive (showPhoneInput / showOTPInput) for easier scanning.
-//   • Error state is a single grouped object — three useState calls collapsed into one.
-//   • isEligible is internal state — App no longer needs to know about it.
 
 import { useState, useCallback, useMemo } from "react";
 import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
@@ -21,8 +10,6 @@ import {
   isValidE164,
 } from "../../lib/services/msisdn.service";
 import OTPSection from "./OTPSection";
-
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 type Phase = "IDLE" | "REGISTERED" | "OTP_SENT" | "VERIFIED";
 
@@ -40,16 +27,10 @@ interface ErrorState {
 
 const EMPTY_ERRORS: ErrorState = { input: "", otp: "", captcha: "" };
 
-// ── reCAPTCHA stub ────────────────────────────────────────────────────────────
-// TODO: Replace with a real backend call once the /captcha/verify endpoint is
-// available. Until then this always returns true so the flow is unblocked.
-// The token should be POSTed server-side — never validated in the browser.
-
+// TODO: Replace with a real backend call once /captcha/verify is available.
 async function verifyCaptchaToken(_token: string): Promise<boolean> {
   return true;
 }
-
-// ── Shared sub-components ─────────────────────────────────────────────────────
 
 function RecaptchaDisclaimer() {
   return (
@@ -76,8 +57,6 @@ function RecaptchaDisclaimer() {
   );
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
 export default function MSISDNStep({
   msisdn,
   setMsisdn,
@@ -85,13 +64,13 @@ export default function MSISDNStep({
 }: MSISDNStepProps) {
   const { executeRecaptcha } = useGoogleReCaptcha();
 
-  // isEligible is local — App does not need to know about it
   const [isEligible, setIsEligible] = useState<boolean | null>(null);
   const [phase, setPhase] = useState<Phase>("IDLE");
   const [errors, setErrors] = useState<ErrorState>(EMPTY_ERRORS);
   const [loading, setLoading] = useState(false);
+  // Seconds received from the server on the most recent generateOTP call
+  const [otpTotalSeconds, setOtpTotalSeconds] = useState(0);
 
-  // Helper — update one error field without touching the others
   const setError = useCallback(
     (field: keyof ErrorState, message: string) =>
       setErrors((prev) => ({ ...prev, [field]: message })),
@@ -100,22 +79,18 @@ export default function MSISDNStep({
 
   const clearErrors = useCallback(() => setErrors(EMPTY_ERRORS), []);
 
-  // ── Derived ───────────────────────────────────────────────────────────────
-
-  // Only recompute when msisdn changes — not on every render
   const maskedPhone = useMemo(
     () => msisdn.slice(0, -4).replace(/[^+\s]/g, "•") + msisdn.slice(-4),
     [msisdn],
   );
 
-  // ── reCAPTCHA guard ───────────────────────────────────────────────────────
-  // Shared between handleContinue and handleVerify so the "not ready" error
-  // is never phrased differently depending on which button the user pressed.
-
   const executeCaptcha = useCallback(
     async (action: string): Promise<string | null> => {
       if (!executeRecaptcha) {
-        setError("captcha", "Security check not ready yet. Please wait a moment.");
+        setError(
+          "captcha",
+          "Security check not ready yet. Please wait a moment.",
+        );
         return null;
       }
       return executeRecaptcha(action);
@@ -123,37 +98,32 @@ export default function MSISDNStep({
     [executeRecaptcha, setError],
   );
 
-  // ── Phone input ───────────────────────────────────────────────────────────
-
   const handlePhoneChange = useCallback(
     (value: string) => {
-      // Allow digits, +, and spaces only. Enforce at most one leading +.
       let cleaned = value.replace(/[^\d+\s]/g, "");
-      if (cleaned.includes("+")) {
-        cleaned = "+" + cleaned.replace(/\+/g, "");
-      }
-
+      if (cleaned.includes("+")) cleaned = "+" + cleaned.replace(/\+/g, "");
       setMsisdn(cleaned);
       clearErrors();
-
-      // If the user edits the number after a registration hit, reset to IDLE
       if (phase === "REGISTERED") setPhase("IDLE");
     },
     [phase, setMsisdn, clearErrors],
   );
 
-  // ── Send OTP ──────────────────────────────────────────────────────────────
+  // ── Send OTP — returns TokenValidity seconds on success ───────────────────
 
   const handleContinue = useCallback(async () => {
     clearErrors();
 
     if (!isValidE164(msisdn)) {
-      setError("input", "Enter a valid international number (e.g. +243970000001)");
+      setError(
+        "input",
+        "Enter a valid international number (e.g. +243970000001)",
+      );
       return;
     }
 
     const token = await executeCaptcha("msisdn_check");
-    if (!token) return; // executeCaptcha already set the error
+    if (!token) return;
 
     setLoading(true);
     try {
@@ -172,16 +142,20 @@ export default function MSISDNStep({
         return;
       }
 
-      await generateOTP(msisdn);
+      const validitySeconds = await generateOTP(msisdn); // ← server TTL
+      setOtpTotalSeconds(validitySeconds);
       setPhase("OTP_SENT");
       setIsEligible(true);
     } catch (err) {
       console.error("[MSISDNStep] OTP generation error:", err);
-      setError("captcha", "Failed to send verification code. Please try again.");
+      setError(
+        "captcha",
+        "Failed to send verification code. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
-  }, [msisdn, executeCaptcha, setIsEligible, clearErrors, setError]);
+  }, [msisdn, executeCaptcha, clearErrors, setError]);
 
   // ── Verify OTP ────────────────────────────────────────────────────────────
 
@@ -217,7 +191,10 @@ export default function MSISDNStep({
             setPhase("IDLE");
             break;
           case "MAX_ATTEMPTS":
-            setError("otp", "Too many incorrect attempts. Please request a new code.");
+            setError(
+              "otp",
+              "Too many incorrect attempts. Please request a new code.",
+            );
             setPhase("IDLE");
             break;
         }
@@ -231,23 +208,23 @@ export default function MSISDNStep({
     [msisdn, executeCaptcha, nextStep, clearErrors, setError],
   );
 
-  // ── Resend OTP ────────────────────────────────────────────────────────────
+  // ── Resend OTP — returns fresh TokenValidity seconds ─────────────────────
 
-  const handleResend = useCallback(async () => {
+  const handleResend = useCallback(async (): Promise<number> => {
     clearOTP();
     clearErrors();
     setLoading(true);
     try {
-      await generateOTP(msisdn);
+      const validitySeconds = await generateOTP(msisdn); // ← fresh server TTL
+      return validitySeconds;
     } catch (err) {
       console.error("[MSISDNStep] OTP resend error:", err);
       setError("otp", "Failed to resend code. Please try again.");
+      return otpTotalSeconds; // fall back to previous value so timer isn't stuck at 0
     } finally {
       setLoading(false);
     }
-  }, [msisdn, clearErrors, setError]);
-
-  // ── Go back to phone input ────────────────────────────────────────────────
+  }, [msisdn, otpTotalSeconds, clearErrors, setError]);
 
   const handleBack = useCallback(() => {
     clearOTP();
@@ -255,14 +232,11 @@ export default function MSISDNStep({
     setPhase("IDLE");
   }, [clearErrors]);
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   const showPhoneInput = phase === "IDLE" || phase === "REGISTERED";
-  const showOTPInput   = phase === "OTP_SENT";
+  const showOTPInput = phase === "OTP_SENT";
 
   return (
     <section className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-2xl font-semibold">Verify your number</h2>
         <p className="mt-1 text-sm text-slate-400">
@@ -272,7 +246,6 @@ export default function MSISDNStep({
         </p>
       </div>
 
-      {/* ── Phase: phone input ────────────────────────────────────────────── */}
       {showPhoneInput && (
         <div className="space-y-3">
           <label className="block text-xs uppercase tracking-widest text-slate-500">
@@ -302,7 +275,6 @@ export default function MSISDNStep({
               <span>⚠</span> {errors.input}
             </p>
           )}
-
           {errors.captcha && (
             <p className="flex items-center gap-1.5 text-sm text-amber-400">
               <span>🔒</span> {errors.captcha}
@@ -330,7 +302,6 @@ export default function MSISDNStep({
         </div>
       )}
 
-      {/* ── Phase: OTP entry ──────────────────────────────────────────────── */}
       {showOTPInput && (
         <div className="space-y-4">
           <div className="flex items-center justify-between text-sm">
@@ -357,6 +328,7 @@ export default function MSISDNStep({
             onResend={handleResend}
             error={errors.otp}
             loading={loading}
+            initialSeconds={otpTotalSeconds}
           />
 
           <RecaptchaDisclaimer />

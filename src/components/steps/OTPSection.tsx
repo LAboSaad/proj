@@ -1,51 +1,46 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  getOTPSecondsLeft,
-  getOTPAttemptsLeft,
-} from "../../lib/services/msisdn.service";
-
-// ── Types ──────────────────────────────────────────────────────────────────
+import { getOTPAttemptsLeft } from "../../lib/services/msisdn.service";
 
 interface OTPSectionProps {
   onVerify: (code: string) => void;
-  onResend: () => void;
+  onResend: () => Promise<number>; // returns fresh TokenValidity seconds
   error: string;
   loading?: boolean;
+  initialSeconds: number; // server-provided TTL on first render
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────
-
 const OTP_LENGTH = 5;
-
-// ── Component ──────────────────────────────────────────────────────────────
 
 export default function OTPSection({
   onVerify,
   onResend,
   error,
   loading = false,
+  initialSeconds,
 }: OTPSectionProps) {
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(""));
-  const [secondsLeft, setSeconds] = useState(() => getOTPSecondsLeft());
+  const [secondsLeft, setSeconds] = useState(initialSeconds);
   const [canResend, setCanResend] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const tickRef = useRef<number | null>(null);
 
-  // ── Countdown timer ────────────────────────────────────────────────────────
   const startTick = () => {
     if (tickRef.current) window.clearInterval(tickRef.current);
     tickRef.current = window.setInterval(() => {
-      const left = getOTPSecondsLeft();
-      setSeconds(left);
-      if (left === 0) {
-        setCanResend(true);
-        if (tickRef.current) window.clearInterval(tickRef.current);
-      }
+      setSeconds((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(tickRef.current!);
+          setCanResend(true);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
   };
 
+  // Start the countdown once on mount using the server-provided initialSeconds
   useEffect(() => {
-    setSeconds(getOTPSecondsLeft());
+    setSeconds(initialSeconds);
     setCanResend(false);
     startTick();
     return () => {
@@ -54,15 +49,12 @@ export default function OTPSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Digit input handlers ───────────────────────────────────────────────────
   const handleChange = (index: number, value: string) => {
     const digit = value.replace(/\D/g, "").slice(-1);
     const next = [...digits];
     next[index] = digit;
     setDigits(next);
-    if (digit && index < OTP_LENGTH - 1) {
-      inputRefs.current[index + 1]?.focus();
-    }
+    if (digit && index < OTP_LENGTH - 1) inputRefs.current[index + 1]?.focus();
   };
 
   const handleKeyDown = (
@@ -90,8 +82,7 @@ export default function OTPSection({
       next[i] = ch;
     });
     setDigits(next);
-    const focusIdx = Math.min(pasted.length, OTP_LENGTH - 1);
-    inputRefs.current[focusIdx]?.focus();
+    inputRefs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
   };
 
   const handleSubmit = () => {
@@ -102,32 +93,28 @@ export default function OTPSection({
     inputRefs.current[0]?.focus();
   };
 
-  const handleResend = () => {
+  const handleResend = async () => {
     setDigits(Array(OTP_LENGTH).fill(""));
     setCanResend(false);
-    setSeconds(120);
-    onResend();
+    // onResend calls generateOTP which returns fresh TokenValidity seconds
+    const freshSeconds = await onResend();
+    setSeconds(freshSeconds);
     startTick();
   };
 
-  // ── Derived display values ─────────────────────────────────────────────────
   const mm = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
   const ss = String(secondsLeft % 60).padStart(2, "0");
   const attemptsLeft = getOTPAttemptsLeft();
   const filled = digits.every(Boolean);
   const isUrgent = secondsLeft < 30 && secondsLeft > 0;
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
-      {/* Timer row */}
       <div className="flex items-center justify-between text-sm">
         <p className="text-slate-400">Enter the 5-digit code.</p>
         {!canResend && (
           <span
-            className={`tabular-nums font-medium transition-colors ${
-              isUrgent ? "text-rose-400" : "text-slate-400"
-            }`}
+            className={`tabular-nums font-medium transition-colors ${isUrgent ? "text-rose-400" : "text-slate-400"}`}
           >
             {isUrgent && <span className="mr-1">⏱</span>}
             {mm}:{ss}
@@ -135,7 +122,6 @@ export default function OTPSection({
         )}
       </div>
 
-      {/* 6 digit boxes */}
       <div className="flex gap-2 justify-center">
         {digits.map((d, i) => (
           <input
@@ -165,7 +151,6 @@ export default function OTPSection({
         ))}
       </div>
 
-      {/* Error + attempts left */}
       {error && (
         <p className="text-sm text-rose-400 text-center">
           <span>⚠ </span>
@@ -178,7 +163,6 @@ export default function OTPSection({
         </p>
       )}
 
-      {/* Verify button */}
       <button
         onClick={handleSubmit}
         disabled={!filled || loading}
@@ -196,7 +180,6 @@ export default function OTPSection({
         )}
       </button>
 
-      {/* Resend row */}
       <p className="text-center text-sm text-slate-500">
         {canResend ? (
           <>
