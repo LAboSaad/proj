@@ -31,18 +31,13 @@ export function LanguageSwitcher({ timers }: Props) {
   return (
     <div className="flex items-center gap-3 flex-wrap">
       {/* Session timer */}
-      <TimerBadge
-        label="Session"
-        value={timers.sessionTimeLeft}
-        expired={timers.sessionExpired}
-      />
-
-      {/* OTP timer */}
-      <TimerBadge
-        label="OTP"
-        value={timers.otpTimeLeft}
-        expired={timers.otpExpired}
-      />
+      {timers.sessionActive && (
+        <TimerBadge
+          label="Session"
+          value={timers.sessionTimeLeft}
+          expired={timers.sessionExpired}
+        />
+      )}
 
       {/* Language select */}
       <div className="relative">
@@ -75,19 +70,25 @@ function TimerBadge({
   const isZero = value === "00:00";
 
   // Color: green > 2 min, amber ≤ 2 min, red expired/zero
-  const color = expired || isZero
-    ? "text-slate-500"
-    : parseInt(value.split(":")[0]) === 0 && parseInt(value.split(":")[1]) <= 120
-    ? "text-amber-400"
-    : "text-emerald-400";
+  const color =
+    expired || isZero
+      ? "text-slate-500"
+      : parseInt(value.split(":")[0]) === 0 &&
+          parseInt(value.split(":")[1]) <= 120
+        ? "text-amber-400"
+        : "text-emerald-400";
 
   // Pulse when under 1 minute and not zero
   const pulse = !isZero && !expired && value.startsWith("00:");
 
   return (
     <div className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm">
-      <span className="text-slate-400 text-xs uppercase tracking-wide">{label}</span>
-      <span className={`font-mono font-semibold ${color} ${pulse ? "animate-pulse" : ""}`}>
+      <span className="text-slate-400 text-xs uppercase tracking-wide">
+        {label}
+      </span>
+      <span
+        className={`font-mono font-semibold ${color} ${pulse ? "animate-pulse" : ""}`}
+      >
         {value}
       </span>
     </div>
