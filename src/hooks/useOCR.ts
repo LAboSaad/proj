@@ -1,112 +1,142 @@
-// src/hooks/useOCR.ts
-//
-// Orchestrates the full OCR + MRZ pipeline for a captured document image.
-//
-// Pipeline:
-//   1. Detect document type (passport / national-id / licence)
-//   2. Crop the MRZ region based on document type
-//   3. Run two Tesseract passes in parallel: raw crop + preprocessed crop
-//   4. Pick the pass with the most valid MRZ characters
-//   5. Normalise and extract MRZ lines
-//   6. Fix common line-length issues and parse with mrz library
-//   7. Map parsed fields → ExtractedFields
-
 import { useCallback, useState } from "react";
-import { parse as parseMRZ } from "mrz";
-import type { ParseResult } from "mrz";
 
-import {
-  cropMRZRegion,
-  detectDocumentType,
-  extractMRZLines,
-  normalizeMRZText,
-  preprocessMRZCanvas,
-} from "../lib/ocr";
-import { dataUrlToImage } from "../utils/image";
 import { initialFields } from "../lib/constants/kyc.constants";
 import type { ExtractedFields } from "../types/kyc";
 import type { KYCSession } from "../lib/services/session.service";
-import { runOCR } from "../lib/services/ocr.service";
 import { formatDate } from "../lib/utils";
+
+// ── Config ────────────────────────────────────────────────────────────────────
+
+const OCR_API_URL = "/api/ocr/passport";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface UseOCRProps {
   documentImage: string;
-  pushError:  (scope: string, message: string) => void;
+  pushError: (scope: string, message: string) => void;
   clearError: () => void;
-  nextStep:   () => void;
+  nextStep: () => void;
 }
 
 interface UseOCRReturn {
-  fields:        ExtractedFields;
-  setFields:     React.Dispatch<React.SetStateAction<ExtractedFields>>;
-  ocrProgress:   number;
-  mrzValid:      boolean | null;
-  mrzMessage:    string;
-  busy:          boolean;
-  runOCRAndMRZ:  () => Promise<void>;
-  rehydrateOCR:  (s: Pick<KYCSession, "fields" | "mrzValid" | "mrzMessage">) => void;
-  resetOCR:      () => void;
+  fields: ExtractedFields;
+  setFields: React.Dispatch<React.SetStateAction<ExtractedFields>>;
+  ocrProgress: number;
+  mrzValid: boolean | null;
+  mrzMessage: string;
+  busy: boolean;
+  runOCRAndMRZ: () => Promise<void>;
+  rehydrateOCR: (
+    s: Pick<KYCSession, "fields" | "mrzValid" | "mrzMessage">,
+  ) => void;
+  resetOCR: () => void;
 }
 
-// ── MRZ line fixup ────────────────────────────────────────────────────────────
-// Applied after extraction, before parsing.
-// Only fixes structural issues (length, start character) — never replaces
-// content characters like L or K, which are valid in names.
+// ── API response shape ────────────────────────────────────────────────────────
 
-function fixMRZLine(line: string, index: number, targetLength: number): string {
-  let l = line.replace(/[^A-Z0-9<]/g, "");
-
-  // Passport line 1 must start with P — OCR sometimes reads it as 0P or OP
-  if (index === 0 && targetLength === 44) {
-    if (l.startsWith("0P") || l.startsWith("OP")) {
-      l = "P<" + l.slice(2);
-    }
-    if (!l.startsWith("P")) {
-      l = "P<" + l.slice(1);
-    }
-  }
-
-  // Pad or truncate to exact target length
-  if (l.length < targetLength) l = l.padEnd(targetLength, "<");
-  if (l.length > targetLength) l = l.slice(0, targetLength);
-
-  return l;
+interface OCRApiResponse {
+  success: boolean;
+  confidence: string; // e.g. "VALID" | "INVALID" | "LOW"
+  mrz_lines: string[];
+  parsed_data: {
+    document_type: string;
+    issuing_country: string;
+    surname: string;
+    given_names: string; // may contain middle name separated by space
+    document_number: string;
+    nationality: string;
+    birth_date: string; // YYMMDD
+    sex: string;
+    expiry_date: string; // YYMMDD
+    optional_data: string;
+    mrz_type: string;
+  };
+  validation: {
+    doc_number_ok: boolean;
+    birth_date_ok: boolean;
+    expiry_date_ok: boolean;
+    optional_data_ok: boolean;
+    composite_ok: boolean;
+    line_lengths_ok: boolean;
+    line_count_ok: boolean;
+    valid_check_digits: number;
+    errors: string[];
+  };
+  engine: string;
+  variant: string;
+  score: number;
+  tiers_attempted: number;
+  processing_time_ms: number;
 }
 
-// ── OCR scoring ───────────────────────────────────────────────────────────────
-// Counts characters that are valid in MRZ — used to pick the better of two
-// Tesseract passes (raw vs preprocessed).
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function scoreMRZText(text: string): number {
-  return text.replace(/[^A-Z0-9<]/g, "").length;
+/** Convert a data URL to a File so it can be sent as multipart form data. */
+function dataUrlToFile(dataUrl: string, filename = "document.jpg"): File {
+  const [header, base64] = dataUrl.split(",");
+  const mime = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], filename, { type: mime });
 }
 
-// ── Field mapping ─────────────────────────────────────────────────────────────
+/** Determine overall MRZ validity from the API validation block. */
+function isApiResponseValid(res: OCRApiResponse): boolean {
+  return (
+    res.success &&
+    res.validation.doc_number_ok &&
+    res.validation.birth_date_ok &&
+    res.validation.expiry_date_ok &&
+    res.validation.composite_ok &&
+    res.validation.line_lengths_ok &&
+    res.validation.line_count_ok &&
+    res.validation.errors.length === 0
+  );
+}
 
-function mapParsedFields(
-  fields: ParseResult["fields"],
-  rawMRZ: string,
+/** Map API parsed_data → ExtractedFields. */
+function mapApiFields(
+  res: OCRApiResponse,
   rawOCRText: string,
 ): ExtractedFields {
-  const clean = (v: string | null | undefined) =>
-    (v ?? "").replace(/</g, " ").trim();
+  const { parsed_data } = res;
+
+  // given_names may be "IBRAHIM TUARIC" — split on first space into first + middle
+  const nameParts = (parsed_data.given_names ?? "").trim().split(/\s+/);
+  const firstName = nameParts[0] ?? "";
+  const middleName = nameParts.slice(1).join(" ");
 
   return {
-    FirstName:         clean(fields.firstName as string),
-    LastName:          clean(fields.lastName  as string),
-    MiddleName:        "",   // MRZ does not carry a separate middle name field
-    Email:             "",   // not in MRZ
-    Address:           "",   // not in MRZ
-    IdDocSerialNumber: (fields.documentNumber as string ?? "").replace(/</g, "").trim(),
-    Nationality:       clean(fields.nationality as string),
-    BirthDate:         fields.birthDate       ? formatDate(fields.birthDate as string)       : "",
-    ExpiryDate:        fields.expirationDate  ? formatDate(fields.expirationDate as string)  : "",
-    Gender:            ((fields.sex as string) ?? "").toUpperCase(),
-    rawMRZ,
+    FirstName: firstName,
+    LastName: parsed_data.surname ?? "",
+    MiddleName: middleName,
+    Email: "", // not in MRZ
+    Address: "", // not in MRZ
+    IdDocSerialNumber: parsed_data.document_number ?? "",
+    Nationality: parsed_data.nationality ?? "",
+    BirthDate: parsed_data.birth_date ? formatDate(parsed_data.birth_date) : "",
+    ExpiryDate: parsed_data.expiry_date
+      ? formatDate(parsed_data.expiry_date)
+      : "",
+    Gender: (parsed_data.sex ?? "").toUpperCase(),
+    rawMRZ: res.mrz_lines.join("\n"),
     rawOCRText,
   };
+}
+
+/** Build a human-readable status message from the API response. */
+function buildMrzMessage(res: OCRApiResponse): string {
+  if (!res.success) return "OCR API failed to process the document.";
+
+  const errors = res.validation.errors;
+  if (errors.length > 0) {
+    return `MRZ format detected, but validation failed: ${errors.join("; ")}.`;
+  }
+
+  if (isApiResponseValid(res)) return "MRZ parsed successfully.";
+
+  return "MRZ detected but one or more check digits are invalid.";
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -117,11 +147,11 @@ export function useOCR({
   clearError,
   nextStep,
 }: UseOCRProps): UseOCRReturn {
-  const [fields,      setFields]      = useState<ExtractedFields>(initialFields);
+  const [fields, setFields] = useState<ExtractedFields>(initialFields);
   const [ocrProgress, setOcrProgress] = useState(0);
-  const [mrzValid,    setMrzValid]    = useState<boolean | null>(null);
-  const [mrzMessage,  setMrzMessage]  = useState("");
-  const [busy,        setBusy]        = useState(false);
+  const [mrzValid, setMrzValid] = useState<boolean | null>(null);
+  const [mrzMessage, setMrzMessage] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const runOCRAndMRZ = useCallback(async (): Promise<void> => {
     if (!documentImage) {
@@ -136,92 +166,72 @@ export function useOCR({
       setMrzValid(null);
       setMrzMessage("");
 
-      // ── Step 1: load image + detect document type ─────────────────────────
-      const img     = await dataUrlToImage(documentImage);
-      const docType = detectDocumentType(img);
+      // ── Step 1: convert data URL → File ───────────────────────────────────
+      const file = dataUrlToFile(documentImage);
+      setOcrProgress(20);
 
-      // ── Step 2: crop MRZ region ───────────────────────────────────────────
-      const mrzCanvas = cropMRZRegion(img, docType);
+      // ── Step 2: build multipart form and POST to OCR API ──────────────────
+      const form = new FormData();
+      form.append("file", file);
 
-      // ── Step 3: preprocess ────────────────────────────────────────────────
-      const processedCanvas = await preprocessMRZCanvas(mrzCanvas);
+      setOcrProgress(40);
 
-      // ── Step 4: dual OCR pass ─────────────────────────────────────────────
-      // Run both in parallel. Each pass reports progress independently;
-      // we average them for the UI indicator.
-      let progressA = 0;
-      let progressB = 0;
+      const response = await fetch(OCR_API_URL, {
+        method: "POST",
+        body: form,
+      });
 
-      const updateProgress = () => {
-        setOcrProgress(Math.round((progressA + progressB) / 2));
-      };
+      setOcrProgress(80);
 
-      const [rawResult, processedResult] = await Promise.all([
-        runOCR(mrzCanvas,       (p) => { progressA = p; updateProgress(); }),
-        runOCR(processedCanvas, (p) => { progressB = p; updateProgress(); }),
-      ]);
+      if (!response.ok) {
+        throw new Error(
+          `OCR API returned ${response.status}: ${response.statusText}`,
+        );
+      }
 
-      const rawText       = rawResult.data.text       ?? "";
-      const processedText = processedResult.data.text ?? "";
+      const res: OCRApiResponse = await response.json();
 
-      // ── Step 5: pick better pass ──────────────────────────────────────────
-      const bestText = scoreMRZText(processedText) >= scoreMRZText(rawText)
-        ? processedText
-        : rawText;
-
-      // ── Step 6: normalise + extract lines ─────────────────────────────────
-      const cleaned = normalizeMRZText(bestText);
-      let lines     = extractMRZLines(cleaned);
-
-      if (lines.length < 2) {
-        // No MRZ found — document may be a licence or unreadable
-        setFields((prev) => ({ ...prev, rawOCRText: cleaned }));
+      // ── Step 3: handle API-level failure ──────────────────────────────────
+      if (!res.success) {
+        setFields((prev) => ({
+          ...prev,
+          rawOCRText: res.mrz_lines?.join("\n") ?? "",
+        }));
         setMrzValid(false);
         setMrzMessage(
-          docType === "licence"
-            ? "Driver licences may not contain a machine-readable zone. Please fill fields manually."
-            : "No MRZ detected. Ensure the document is flat, well-lit, and the MRZ strip is visible.",
+          "OCR API could not read the document. Ensure it is flat, well-lit, and the MRZ strip is visible.",
         );
         nextStep();
         return;
       }
 
-      // ── Step 7: fix line structure ────────────────────────────────────────
-      const targetLength = lines[0].length >= 40 ? 44 : 30;
-      lines = lines
-        .slice(0, targetLength === 44 ? 2 : 3)
-        .map((line, i) => fixMRZLine(line, i, targetLength));
-
-      const mrzSource = lines.join("\n");
-
-      // ── Step 8: parse MRZ ─────────────────────────────────────────────────
-      let parsed: ParseResult | null = null;
-      let message = "MRZ detected but could not be parsed.";
-
-      try {
-        parsed  = parseMRZ(lines);
-        message = parsed.valid
-          ? "MRZ parsed successfully."
-          : "MRZ format detected, but one or more check digits are invalid.";
-      } catch {
-        message = "MRZ lines found but are not in a recognised format.";
-      }
-
-      // ── Step 9: map fields ────────────────────────────────────────────────
-      if (parsed?.fields) {
-        setFields(mapParsedFields(parsed.fields, mrzSource, cleaned));
-        setMrzValid(parsed.valid);
-      } else {
-        setFields((prev) => ({ ...prev, rawMRZ: mrzSource, rawOCRText: cleaned }));
+      // ── Step 4: no MRZ lines returned ─────────────────────────────────────
+      if (!res.mrz_lines || res.mrz_lines.length < 2) {
+        setFields((prev) => ({ ...prev, rawOCRText: "" }));
         setMrzValid(false);
+        setMrzMessage(
+          "No MRZ detected. Ensure the document is flat, well-lit, and the MRZ strip is visible.",
+        );
+        nextStep();
+        return;
       }
 
+      // ── Step 5: map fields + set state ────────────────────────────────────
+      const rawOCRText = res.mrz_lines.join("\n");
+      const valid = isApiResponseValid(res);
+      const message = buildMrzMessage(res);
+
+      setFields(mapApiFields(res, rawOCRText));
+      setMrzValid(valid);
       setMrzMessage(message);
       setOcrProgress(100);
       nextStep();
     } catch (err) {
       console.error("[useOCR] OCR pipeline error:", err);
-      pushError("ocr", err instanceof Error ? err.message : "OCR failed unexpectedly.");
+      pushError(
+        "ocr",
+        err instanceof Error ? err.message : "OCR failed unexpectedly.",
+      );
     } finally {
       setBusy(false);
     }
@@ -230,9 +240,9 @@ export function useOCR({
   // ── Rehydrate ─────────────────────────────────────────────────────────────
   const rehydrateOCR = useCallback(
     (s: Pick<KYCSession, "fields" | "mrzValid" | "mrzMessage">) => {
-      if (s.fields)                setFields(s.fields);
+      if (s.fields) setFields(s.fields);
       if (s.mrzValid !== undefined) setMrzValid(s.mrzValid);
-      if (s.mrzMessage)            setMrzMessage(s.mrzMessage);
+      if (s.mrzMessage) setMrzMessage(s.mrzMessage);
     },
     [],
   );

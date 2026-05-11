@@ -10,8 +10,10 @@ import { STORAGE_KEYS, OTP_MAX_ATTEMPTS } from "../constants/kyc.constants";
 export type CheckResult = "REGISTERED" | "ELIGIBLE" | "INVALID";
 
 export type OTPResult =
-  | { ok: true;  token: string; expiresAt: number }
-  | { ok: false; reason: "WRONG_CODE" | "EXPIRED" | "MAX_ATTEMPTS";
+  | { ok: true; token: string; expiresAt: number }
+  | {
+      ok: false;
+      reason: "WRONG_CODE" | "EXPIRED" | "MAX_ATTEMPTS";
       message: string;
       // Server-provided remaining attempts — only present on WRONG_CODE.
       // undefined on EXPIRED / MAX_ATTEMPTS (no more attempts are relevant).
@@ -21,13 +23,13 @@ export type OTPResult =
 // ── Internal types ────────────────────────────────────────────────────────────
 
 interface OTPSession {
-  msisdn:       string;
-  expiresAt:    number;
+  msisdn: string;
+  expiresAt: number;
   attemptsLeft: number; // client-side mirror — used as a guard before hitting the API
 }
 
 interface StoredOTPToken {
-  token:     string;
+  token: string;
   expiresAt: number;
 }
 
@@ -35,8 +37,12 @@ interface StoredOTPToken {
 
 const _state: { session: OTPSession | null } = { session: null };
 
-function getActiveSession(): OTPSession | null   { return _state.session; }
-function setActiveSession(s: OTPSession | null)  { _state.session = s;   }
+function getActiveSession(): OTPSession | null {
+  return _state.session;
+}
+function setActiveSession(s: OTPSession | null) {
+  _state.session = s;
+}
 
 // ── Page-load rehydration ─────────────────────────────────────────────────────
 
@@ -46,7 +52,11 @@ function rehydrateSessionFromStorage(): void {
     if (!raw) return;
     const stored = JSON.parse(raw) as StoredOTPToken;
     if (typeof stored.expiresAt === "number" && Date.now() < stored.expiresAt) {
-      setActiveSession({ msisdn: "", expiresAt: stored.expiresAt, attemptsLeft: OTP_MAX_ATTEMPTS });
+      setActiveSession({
+        msisdn: "",
+        expiresAt: stored.expiresAt,
+        attemptsLeft: OTP_MAX_ATTEMPTS,
+      });
     }
   } catch {
     // Corrupted storage — user will need to request a new OTP
@@ -68,7 +78,10 @@ export function isValidE164(msisdn: string): boolean {
 // ── Storage helpers ───────────────────────────────────────────────────────────
 
 function saveToken(token: string, expiresAt: number): void {
-  localStorage.setItem(STORAGE_KEYS.OTP_TOKEN, JSON.stringify({ token, expiresAt }));
+  localStorage.setItem(
+    STORAGE_KEYS.OTP_TOKEN,
+    JSON.stringify({ token, expiresAt }),
+  );
 }
 
 function loadToken(): string | null {
@@ -87,7 +100,7 @@ function loadToken(): string | null {
 
 export function checkMSISDN(msisdn: string): CheckResult {
   if (!isValidE164(msisdn)) return "INVALID";
-  const normalized   = normalizeMSISDN(msisdn);
+  const normalized = normalizeMSISDN(msisdn);
   const isRegistered = registeredUsers.some(
     (u) => normalizeMSISDN(u.msisdn) === normalized,
   );
@@ -101,18 +114,27 @@ export function checkMSISDN(msisdn: string): CheckResult {
  * caller can initialise the OTPSection countdown timer.
  * No token is stored — the user hasn't proved ownership yet.
  */
-export async function generateOTP(msisdn: string): Promise<number> {
+export async function generateOTP(
+  msisdn: string,
+  captchaToken: string,
+): Promise<number> {
   const normalized = normalizeMSISDN(msisdn);
-  const data       = await apiGenerateOTP(normalized);
+  const data = await apiGenerateOTP(normalized, captchaToken);
 
   if (data.StatusCode !== 200 || data.Status !== "successful") {
-    throw new Error(data.StatusDescription ?? "Failed to send verification code.");
+    throw new Error(
+      data.StatusDescription ?? "Failed to send verification code.",
+    );
   }
 
   const validitySeconds = data.Data.OTPValidity;
-  const expiresAt       = Date.now() + validitySeconds * 1000;
+  const expiresAt = Date.now() + validitySeconds * 1000;
 
-  setActiveSession({ msisdn: normalized, expiresAt, attemptsLeft: OTP_MAX_ATTEMPTS });
+  setActiveSession({
+    msisdn: normalized,
+    expiresAt,
+    attemptsLeft: OTP_MAX_ATTEMPTS,
+  });
 
   return validitySeconds;
 }
@@ -142,13 +164,16 @@ export function getOTPSecondsLeft(): number {
  */
 export async function verifyOTP(
   msisdn: string,
-  otp:    string,
+  otp: string,
+  captchaToken: string,
 ): Promise<OTPResult> {
   const session = getActiveSession();
 
-  const FALLBACK_EXPIRED = "Your verification code has expired. Please request a new one.";
-  const FALLBACK_MAX     = "Too many incorrect attempts. Please request a new code.";
-  const FALLBACK_WRONG   = "Incorrect code — please try again.";
+  const FALLBACK_EXPIRED =
+    "Your verification code has expired. Please request a new one.";
+  const FALLBACK_MAX =
+    "Too many incorrect attempts. Please request a new code.";
+  const FALLBACK_WRONG = "Incorrect code — please try again.";
 
   if (!session) {
     return { ok: false, reason: "EXPIRED", message: FALLBACK_EXPIRED };
@@ -168,20 +193,25 @@ export async function verifyOTP(
   setActiveSession({ ...session, attemptsLeft: session.attemptsLeft - 1 });
 
   const normalized = normalizeMSISDN(msisdn);
-  const data       = await apiValidateOTP(normalized, otp);
+  const data = await apiValidateOTP(normalized, otp, captchaToken);
 
   // ── Type guards for the response Data union ──────────────────────────────
   // data.Data is { Token: {...} } | { AttemptsRemaining: number } | null.
   // TypeScript cannot narrow a union by property access alone, so we use
   // explicit "in" guards before reading either shape.
-  const hasToken       = data.Data !== null && "Token"             in (data.Data ?? {});
-  const hasAttempts    = data.Data !== null && "AttemptsRemaining" in (data.Data ?? {});
+  const hasToken = data.Data !== null && "Token" in (data.Data ?? {});
+  const hasAttempts =
+    data.Data !== null && "AttemptsRemaining" in (data.Data ?? {});
 
   // ── Success ───────────────────────────────────────────────────────────────
   if (data.StatusCode === 200 && data.Status === "successful" && hasToken) {
-    const tokenData  = (data.Data as { Token: { TokenType: string; TokenValidity: number; Token: string } }).Token;
+    const tokenData = (
+      data.Data as {
+        Token: { TokenType: string; TokenValidity: number; Token: string };
+      }
+    ).Token;
     const serverTime = new Date(data.StatusDate).getTime();
-    const expiresAt  = serverTime + tokenData.TokenValidity * 1000;
+    const expiresAt = serverTime + tokenData.TokenValidity * 1000;
 
     saveToken(tokenData.Token, expiresAt);
     createSession({ msisdn: normalized }, expiresAt);
@@ -191,8 +221,8 @@ export async function verifyOTP(
   }
 
   // ── Failure — read AttemptsRemaining from response body ──────────────────
-  const desc               = data.StatusDescription ?? "";
-  const attemptsRemaining  = hasAttempts
+  const desc = data.StatusDescription ?? "";
+  const attemptsRemaining = hasAttempts
     ? (data.Data as { AttemptsRemaining: number }).AttemptsRemaining
     : undefined;
 
@@ -212,9 +242,9 @@ export async function verifyOTP(
 
   // Wrong code — keep session alive, return server's remaining count
   return {
-    ok:                false,
-    reason:            "WRONG_CODE",
-    message:           desc || FALLBACK_WRONG,
+    ok: false,
+    reason: "WRONG_CODE",
+    message: desc || FALLBACK_WRONG,
     attemptsRemaining,
   };
 }

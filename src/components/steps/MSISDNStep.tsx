@@ -28,16 +28,6 @@ interface ErrorState {
 }
 
 const EMPTY_ERRORS: ErrorState = { input: "", otp: "", captcha: "" };
-
-// ── reCAPTCHA stub ────────────────────────────────────────────────────────────
-// TODO: Replace with a real backend call once /captcha/verify is available.
-
-async function verifyCaptchaToken(_token: string): Promise<boolean> {
-  return true;
-}
-
-// ── Shared sub-components ─────────────────────────────────────────────────────
-
 function RecaptchaDisclaimer() {
   return (
     <p className="text-center text-xs text-slate-600">
@@ -140,12 +130,6 @@ export default function MSISDNStep({
 
     setLoading(true);
     try {
-      const captchaOk = await verifyCaptchaToken(token);
-      if (!captchaOk) {
-        setError("captcha", "Security check failed. Please try again.");
-        return;
-      }
-
       const result = checkMSISDN(msisdn);
       if (result === "REGISTERED") {
         setPhase("REGISTERED");
@@ -153,14 +137,12 @@ export default function MSISDNStep({
         return;
       }
 
-      // generateOTP returns the server TTL in seconds
-      const validitySeconds = await generateOTP(msisdn);
+      const validitySeconds = await generateOTP(msisdn, token);
       setOtpTotalSeconds(validitySeconds);
-      setAttemptsLeft(undefined); // reset — fresh OTP, no attempts used yet
+      setAttemptsLeft(undefined);
       setPhase("OTP_SENT");
     } catch (err) {
       console.error("[MSISDNStep] OTP generation error:", err);
-      // Surface the backend's StatusDescription directly (throttle message, etc.)
       setError(
         "captcha",
         err instanceof Error
@@ -183,13 +165,7 @@ export default function MSISDNStep({
 
       setLoading(true);
       try {
-        const captchaOk = await verifyCaptchaToken(token);
-        if (!captchaOk) {
-          setError("otp", "Security check failed. Please try again.");
-          return;
-        }
-
-        const result = await verifyOTP(msisdn, code);
+        const result = await verifyOTP(msisdn, code, token);
 
         if (result.ok) {
           setPhase("VERIFIED");
@@ -197,10 +173,8 @@ export default function MSISDNStep({
           return;
         }
 
-        // Surface the backend message directly — it's already user-facing
         setError("otp", result.message);
-        console.log("checking what is result", result);
-        // Use the server's authoritative remaining count (only on WRONG_CODE)
+
         if (result.reason === "WRONG_CODE") {
           setAttemptsLeft(result.attemptsRemaining);
         } else {
@@ -220,14 +194,17 @@ export default function MSISDNStep({
 
   // ── Resend OTP ────────────────────────────────────────────────────────────
 
-  // Returns fresh TTL seconds so OTPSection can reset its countdown
   const handleResend = useCallback(async (): Promise<number> => {
     clearOTP();
     clearErrors();
+
+    const token = await executeCaptcha("msisdn_check");
+    if (!token) return otpTotalSeconds;
+
     setLoading(true);
     try {
-      const validitySeconds = await generateOTP(msisdn);
-      setAttemptsLeft(undefined); // fresh OTP — reset attempt display
+      const validitySeconds = await generateOTP(msisdn, token);
+      setAttemptsLeft(undefined);
       return validitySeconds;
     } catch (err) {
       console.error("[MSISDNStep] OTP resend error:", err);
@@ -237,11 +214,11 @@ export default function MSISDNStep({
           ? err.message
           : "Failed to resend code. Please try again.",
       );
-      return otpTotalSeconds; // keep current countdown on failure
+      return otpTotalSeconds;
     } finally {
       setLoading(false);
     }
-  }, [msisdn, otpTotalSeconds, clearErrors, setError]);
+  }, [msisdn, otpTotalSeconds, executeCaptcha, clearErrors, setError]);
 
   // ── Go back to phone input ────────────────────────────────────────────────
 
