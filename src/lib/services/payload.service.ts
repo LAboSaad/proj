@@ -2,9 +2,9 @@ import type {
   DocumentQuality,
   ExtractedFields,
   FaceMatchResult,
+  LivenessChallenge,
   SubmissionPayload,
 } from "../../types/kyc";
-import type { LivenessChallenge } from "../constants/kyc.constants";
 
 export function buildPayload(args: {
   consentAccepted: boolean;
@@ -20,6 +20,7 @@ export function buildPayload(args: {
   mrzValid: boolean | null;
   mrzMessage: string;
   faceMatch: FaceMatchResult | null;
+  signatureImage:string
 }): SubmissionPayload {
   const {
     consentAccepted,
@@ -35,6 +36,7 @@ export function buildPayload(args: {
     mrzValid,
     mrzMessage,
     faceMatch,
+    signatureImage,
   } = args;
 
   const readyForBackendPost = Boolean(
@@ -51,6 +53,7 @@ export function buildPayload(args: {
   return {
     consentAccepted,
     capturedAt: new Date().toISOString(),
+    signatureImage,
     images: {
       selfie: selfieImage,
       FaceSidePhoto_b64: faceSidePhoto,

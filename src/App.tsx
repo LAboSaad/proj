@@ -38,6 +38,7 @@ import { LanguageSwitcher } from "./components/layout/LanguageSwitcher";
 import { transformToBackendPayload } from "./utils/image";
 import type { SessionPatch } from "./lib/services/session.service";
 import DocumentStep from "./components/steps/document/DocumentStep";
+import SignatureStep from "./components/steps/Signaturestep";
 
 // ── Auto-save helper ──────────────────────────────────────────────────────────
 // Consolidates the rehydration guard so it isn't copy-pasted across 10 effects.
@@ -96,6 +97,14 @@ export default function App(): JSX.Element {
 
   // ── Document type ─────────────────────────────────────────────────────────
   const [docType, setDocType] = useState("");
+
+  // ── Signature ─────────────────────────────────────────────────────────────
+  const [signatureImage, setSignatureImageState] = useState("");
+
+  const setSignatureImage = (dataUrl: string) => {
+    setSignatureImageState(dataUrl);
+    saveSession({ signatureImage: dataUrl });
+  };
 
   // ── Liveness ──────────────────────────────────────────────────────────────
   const {
@@ -195,6 +204,7 @@ export default function App(): JSX.Element {
       if (s.docType) setDocType(s.docType);
       if (s.selfieImage) setSelfieImage(s.selfieImage);
       if (s.faceSidePhoto) setFaceSidePhoto(s.faceSidePhoto);
+      if (s.signatureImage) setSignatureImageState(s.signatureImage);
 
       rehydrateDocument({
         documentImage: s.documentImage,
@@ -231,6 +241,7 @@ export default function App(): JSX.Element {
   useSaveSession({ docType }, isRehydrating, [docType]);
   useSaveSession({ selfieImage }, isRehydrating, [selfieImage]);
   useSaveSession({ faceSidePhoto }, isRehydrating, [faceSidePhoto]);
+  useSaveSession({ signatureImage }, isRehydrating, [signatureImage]);
   useSaveSession({ documentImage }, isRehydrating, [documentImage]);
   useSaveSession({ documentBackImage }, isRehydrating, [documentBackImage]);
   useSaveSession({ documentQuality }, isRehydrating, [documentQuality]);
@@ -254,6 +265,7 @@ export default function App(): JSX.Element {
         livenessDone,
         livenessCompleted,
         finalYawEstimate: landmarkStatus.yawEstimate,
+        signatureImage,
         documentQuality,
         fields,
         mrzValid,
@@ -269,6 +281,7 @@ export default function App(): JSX.Element {
       livenessDone,
       livenessCompleted,
       landmarkStatus.yawEstimate,
+      signatureImage,
       documentQuality,
       fields,
       mrzValid,
@@ -291,6 +304,7 @@ export default function App(): JSX.Element {
       resetFaceMatch();
       resetLiveness();
       setMsisdn("");
+      setSignatureImageState("");
       setDocType("");
     });
 
@@ -317,7 +331,12 @@ export default function App(): JSX.Element {
           modelsLoaded={modelsLoaded}
           activeStepLabel={activeStep.label}
         />
-        <Stepper steps={steps} stepIndex={stepIndex} maxStepReached={maxStepReached} onStepClick={goToStep} />
+        <Stepper
+          steps={steps}
+          stepIndex={stepIndex}
+          maxStepReached={maxStepReached}
+          onStepClick={goToStep}
+        />
 
         {error && (
           <div className="mb-6 rounded-2xl border border-[#ee7d00] bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
@@ -366,8 +385,20 @@ export default function App(): JSX.Element {
                 phase={phase}
                 startChallenges={startChallenges}
                 retryChallenge={retryChallenge}
-                retakeSelfie={() => { resetSelfie(); resetLiveness(); }}
+                retakeSelfie={() => {
+                  resetSelfie();
+                  resetLiveness();
+                }}
                 captureStatus={captureStatus}
+              />
+            )}
+
+            {activeStep.key === "signature" && (
+              <SignatureStep
+                signatureImage={signatureImage}
+                setSignatureImage={setSignatureImage}
+                nextStep={nextStep}
+                prevStep={prevStep}
               />
             )}
 

@@ -1,4 +1,3 @@
-
 import type { Step, ExtractedFields, KYCSession } from "../../types/kyc";
 
 // ── Flow steps ────────────────────────────────────────────────────────────────
@@ -9,6 +8,7 @@ export const steps: Step[] = [
   { key: "selfie", label: "Selfie & Liveness" },
   { key: "document", label: "Document Capture" },
   { key: "ocr", label: "OCR & MRZ" },
+  { key: "signature", label: "signature" },
   { key: "match", label: "Face Match" },
   { key: "review", label: "Review Payload" },
 ];
@@ -66,6 +66,7 @@ export const SESSION_DEFAULTS: Omit<KYCSession, "expiresAt"> = {
   faceSidePhoto: "",
   documentImage: "",
   documentBackImage: "",
+  signatureImage: "",
   documentQuality: null,
   documentBackQuality: null,
   fields: initialFields,

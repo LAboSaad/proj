@@ -2,6 +2,7 @@ export type StepKey =
   | "msisdn"
   | "consent"
   | "selfie"
+  | "signature"
   | "document"
   | "ocr"
   | "match"
@@ -106,6 +107,7 @@ export type OcrRunResult = {
 export type SubmissionPayload = {
   consentAccepted: boolean;
   capturedAt: string;
+  signatureImage: string;
   images: {
     selfie: string;
     FaceSidePhoto_b64: string;
@@ -134,6 +136,7 @@ export interface KYCSession {
   stepKey: StepKey;
   maxStepReached: number;
   msisdn: string;
+  signatureImage: string;
   agreed: boolean;
   docType: string;
   selfieImage: string;
