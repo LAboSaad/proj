@@ -57,6 +57,7 @@ export interface SIMRegistrationPayload {
   NationalIdNumber: string;
   IdDocFontPhoto_b64: string;
   IdDocRearPhoto_b64: string;
+  SignaturePhoto_b64: string;
   SIMType: string;
   ICC: string;
   IMSI: string;

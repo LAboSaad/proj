@@ -291,8 +291,8 @@ export default function App(): JSX.Element {
   );
 console.log("internalPayload?", internalPayload)
   const backendPayload = useMemo(
-    () => transformToBackendPayload(internalPayload, msisdn),
-    [internalPayload, msisdn],
+    () => transformToBackendPayload(internalPayload, msisdn, docType),
+    [internalPayload, msisdn, docType],
   );
 
   // ── Reset ─────────────────────────────────────────────────────────────────

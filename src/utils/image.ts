@@ -110,9 +110,16 @@ function resolveGender(raw: string | undefined | null): string {
   return "";
 }
 
+const DOC_TYPE_LABELS: Record<string, string> = {
+  national_id: "National ID",
+  passport: "Passport",
+  drivers_license: "Driver's License",
+};
+
 export function transformToBackendPayload(
   payload: SubmissionPayload,
   msisdn: string,
+  docType: string,
 ) {
   // Read language from i18next localStorage key, fallback to "EN"
   const rawLang = localStorage.getItem("i18nextLng") ?? "EN";
@@ -138,7 +145,7 @@ console.log("payload", payload)
     FaceFrontPhoto_b64: payload.images.selfie || "",
     FaceSidePhoto_b64: payload.images.FaceSidePhoto_b64 || "",
 
-    IdDocType: "National ID",
+    IdDocType: DOC_TYPE_LABELS[docType] ?? "National ID",
 
     IdDocSerialNumber: payload.ocr.IdDocSerialNumber || "",
     NationalIdNumber: payload.ocr.IdDocSerialNumber || "",
@@ -153,5 +160,6 @@ console.log("payload", payload)
 
     IdDocFontPhoto_b64: payload.images.IdDocFontPhoto_b64 || "",
     IdDocRearPhoto_b64: payload.images.IdDocRearPhoto_b64 || "",
+    SignaturePhoto_b64: payload.signatureImage || "",
   };
 }
