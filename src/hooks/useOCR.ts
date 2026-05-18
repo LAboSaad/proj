@@ -1,13 +1,11 @@
 import { useCallback, useState } from "react";
 
+import { apiValidateMRZFromOCR } from "../lib/api/kyc.api";
+import { getStoredToken } from "../lib/services/msisdn.service";
 import { initialFields } from "../lib/constants/kyc.constants";
 import type { ExtractedFields } from "../types/kyc";
 import type { KYCSession } from "../lib/services/session.service";
 import { formatDate } from "../lib/utils";
-
-// ── Config ────────────────────────────────────────────────────────────────────
-
-const OCR_API_URL = "/api/ocr/passport";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -71,15 +69,6 @@ interface OCRApiResponse {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Convert a data URL to a File so it can be sent as multipart form data. */
-function dataUrlToFile(dataUrl: string, filename = "document.jpg"): File {
-  const [header, base64] = dataUrl.split(",");
-  const mime = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new File([bytes], filename, { type: mime });
-}
 
 /** Determine overall MRZ validity from the API validation block. */
 function isApiResponseValid(res: OCRApiResponse): boolean {
@@ -166,30 +155,26 @@ export function useOCR({
       setMrzValid(null);
       setMrzMessage("");
 
-      // ── Step 1: convert data URL → File ───────────────────────────────────
-      const file = dataUrlToFile(documentImage);
+      // ── Step 1: get auth token ────────────────────────────────────────────
       setOcrProgress(20);
+      const token = getStoredToken();
+      if (!token) {
+        pushError("ocr", "Session expired. Please restart the registration.");
+        return;
+      }
 
-      // ── Step 2: build multipart form and POST to OCR API ──────────────────
-      const form = new FormData();
-      form.append("file", file);
-
+      // ── Step 2: build multipart form and POST via MRZ API ─────────────────
       setOcrProgress(40);
-
-      const response = await fetch(OCR_API_URL, {
-        method: "POST",
-        body: form,
-      });
-
+      const response = await apiValidateMRZFromOCR(documentImage, token);
       setOcrProgress(80);
 
-      if (!response.ok) {
+      if (response.StatusCode !== 200 || !response.Data) {
         throw new Error(
-          `OCR API returned ${response.status}: ${response.statusText}`,
+          response.StatusDescription || `OCR API returned status ${response.StatusCode}`,
         );
       }
 
-      const res: OCRApiResponse = await response.json();
+      const res = response.Data as OCRApiResponse;
 
       // ── Step 3: handle API-level failure ──────────────────────────────────
       if (!res.success) {
