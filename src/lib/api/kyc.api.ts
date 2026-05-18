@@ -6,10 +6,6 @@ import { ENV } from "../config/env";
 const kycApi = axios.create({
   baseURL: ENV.API_BASE_URL,
   headers: { "Content-Type": "application/json" },
-  // Never throw on any HTTP status — let the service layer read StatusCode
-  // and StatusDescription from the response body and decide what to do.
-  // Without this, Axios throws on 4xx/5xx before the body is ever read,
-  // so StatusDescription ("Too many OTP requests…") never reaches the UI.
   validateStatus: () => true,
 });
 
@@ -22,7 +18,7 @@ export interface GenerateOTPResponse {
   StatusDate: string;
   Data: {
     OTP: string;
-    OTPValidity: number; // seconds — drives the OTPSection countdown timer
+    OTPValidity: number;
   };
 }
 
@@ -30,12 +26,9 @@ export interface ValidateOTPResponse {
   Status: string;
   StatusCode: number;
   StatusDescription: string;
-  // StatusDate is the server timestamp used to anchor the token expiry.
-  // Using the server clock (not Date.now()) eliminates client/server skew.
   StatusDate: string;
-  Data: // Success — token returned
+  Data:
     | { Token: { TokenType: string; TokenValidity: number; Token: string } }
-    // Failure — server's authoritative remaining attempt count
     | { AttemptsRemaining: number }
     | null;
 }
@@ -73,6 +66,28 @@ export interface SIMRegistrationResponse {
   Data: null | object;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function dataUrlToFile(
+  dataUrl: string,
+  filename = "document.jpg",
+): File {
+  const [header, base64] = dataUrl.split(",");
+
+  const mime =
+    header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
+
+  const binary = atob(base64);
+
+  const bytes = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return new File([bytes], filename, { type: mime });
+}
+
 // ── OTP ───────────────────────────────────────────────────────────────────────
 
 export async function apiGenerateOTP(
@@ -93,13 +108,13 @@ export async function apiGenerateOTP(
 export async function apiValidateOTP(
   msisdn: string,
   otp: string,
-  captchaToken: string,        
+  captchaToken: string,
 ): Promise<ValidateOTPResponse> {
   const { data } = await kycApi.post<ValidateOTPResponse>(
     `/HTTP_ValidateRegistrationOTP/`,
     { MSISDN: msisdn, OTP: otp },
     {
-      headers: { "X-Captcha-Token": captchaToken }, 
+      headers: { "X-Captcha-Token": captchaToken },
     },
   );
   return data;
@@ -122,4 +137,31 @@ export async function apiSubmitSIMRegistration(
     },
   );
   return data;
+}
+
+// ── OCR / MRZ ─────────────────────────────────────────────────────────────────
+
+export async function apiValidateMRZFromOCR(
+  dataUrl: string,
+  token: string,
+): Promise<any> {
+  const file = dataUrlToFile(dataUrl);
+
+  const form = new FormData();
+  form.append("file", file);
+
+  const response = await kycApi.post(
+    `/HTTP_ValidateMRZFromOCR/`,
+    form,
+    {
+      // baseURL: ENV.MRZ_API_BASE_URL,
+      headers: {
+        "Content-Type": undefined,
+        Authorization: `Bearer ${token}`,
+        SourceApp: "",
+      },
+    },
+  );
+
+  return response.data;
 }
