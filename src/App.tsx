@@ -289,7 +289,7 @@ export default function App(): JSX.Element {
       faceMatch,
     ],
   );
-
+console.log("internalPayload?", internalPayload)
   const backendPayload = useMemo(
     () => transformToBackendPayload(internalPayload, msisdn),
     [internalPayload, msisdn],

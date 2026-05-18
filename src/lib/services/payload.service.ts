@@ -48,8 +48,7 @@ export function buildPayload(args: {
     faceMatch &&
     documentQuality?.looksUsefulForOCR,
   );
-  console.log("documentImage?", documentImage);
-  console.log("documentBackImage", documentBackImage);
+
   return {
     consentAccepted,
     capturedAt: new Date().toISOString(),

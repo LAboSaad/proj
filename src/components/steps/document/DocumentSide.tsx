@@ -8,9 +8,16 @@ import Webcam from "react-webcam";
 import { QualityPanel } from "./QualityPanel";
 import type { DocumentQuality } from "../../../types/kyc";
 
+const DOC_TYPE_LABELS: Record<string, string> = {
+  passport:        "Passport",
+  national_id:     "National ID",
+  drivers_license: "Driver's License",
+};
+
 interface DocumentSideProps {
   /** "front" | "back" — used for labels and alt text */
   side:                "front" | "back";
+  docType:             string;
   previewMode:         "camera" | "upload";
   docWebcamRef:        React.RefObject<Webcam | null>;
   docVideoConstraints: MediaTrackConstraints;
@@ -27,15 +34,13 @@ interface DocumentSideProps {
 const SIDE_LABELS = {
   front: {
     heading:       "Front of document",
-    uploadTitle:   "Upload front of passport or ID",
-    uploadHint:    "PNG or JPG. Prefer a flat, sharp image with visible MRZ.",
+       uploadHint:    "PNG or JPG. Make sure the image is clear and flat.",
     captureButton: "Capture front",
     imageAlt:      "Document front",
     imageLabel:    "Front document image",
   },
   back: {
     heading:       "Back of document",
-    uploadTitle:   "Upload back of passport or ID",
     uploadHint:    "PNG or JPG. Make sure the image is clear and flat.",
     captureButton: "Capture back",
     imageAlt:      "Document back",
@@ -45,6 +50,7 @@ const SIDE_LABELS = {
 
 export function DocumentSide({
   side,
+  docType,
   previewMode,
   docWebcamRef,
   docVideoConstraints,
@@ -55,6 +61,8 @@ export function DocumentSide({
   onDownload,
 }: DocumentSideProps) {
   const labels = SIDE_LABELS[side];
+  const docLabel = DOC_TYPE_LABELS[docType] ?? docType;
+  const uploadTitle = `Upload ${side} of ${docLabel}`;
 
   return (
     <div className="space-y-3">
@@ -75,7 +83,7 @@ export function DocumentSide({
         </div>
       ) : (
         <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-slate-700 bg-slate-950 px-6 py-10 text-center text-slate-300">
-          <span className="text-lg font-medium">{labels.uploadTitle}</span>
+          <span className="text-lg font-medium">{uploadTitle}</span>
           <span className="mt-2 text-sm text-slate-400">{labels.uploadHint}</span>
           <input
             type="file"

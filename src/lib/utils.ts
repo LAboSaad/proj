@@ -14,7 +14,6 @@ export function variance(values: number[]): number {
   return mean(values.map((value) => (value - avg) ** 2));
 }
 
-// Replace similarityFromDistance with this:
 export function similarityFromDistance(distance: number): number {
   // Centered at 0.55 (slightly above threshold) so near-matches
   // display as a reasonable percentage rather than collapsing to ~30%
@@ -82,59 +81,3 @@ export const toBase64 = (file: Blob): Promise<string> =>
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = reject;
   });
-
-//  export const extractFieldsWithAI = async (image: Blob) => {
-//   try {
-//     const base64 = await toBase64(image);
-
-//     const res = await fetch("https://api.openai.com/v1/responses", {
-//       method: "POST",
-//       headers: {
-//         Authorization: `Bearer ${OPENAI_API_KEY}`,
-//         "Content-Type": "application/json",
-//       },
-//       body: JSON.stringify({
-//         model: "o4-mini",
-//         input: [
-//           {
-//             role: "user",
-//             content: [
-//               {
-//                 type: "input_text",
-//                 text: `
-// Extract the following fields from this identity document.
-
-// Return ONLY valid JSON in this format:
-// {
-//   "firstName": "",
-//   "lastName": "",
-//   "documentNumber": "",
-//   "nationality": "",
-//   "dateOfBirth": "",
-//   "expiryDate": "",
-//   "gender": ""
-// }
-
-// If a field is missing, return empty string.
-//                 `,
-//               },
-//               {
-//                 type: "input_image",
-//                 image_url: base64,
-//               },
-//             ],
-//           },
-//         ],
-//       }),
-//     });
-
-//     const data = await res.json();
-
-//     const text = data.output?.[0]?.content?.[0]?.text || "{}";
-
-//     return JSON.parse(text);
-//   } catch (err) {
-//     console.error("AI extraction failed", err);
-//     return null;
-//   }
-// };

@@ -166,6 +166,7 @@ export default function DocumentStep({
           {/* ── Front side ──────────────────────────────────────────────── */}
           <DocumentSide
             side="front"
+            docType={docType}
             previewMode={documentPreviewMode}
             docWebcamRef={docWebcamRef}
             docVideoConstraints={docVideoConstraints}
@@ -181,6 +182,7 @@ export default function DocumentStep({
             <div className="border-t border-slate-800 pt-5">
               <DocumentSide
                 side="back"
+                docType={docType}
                 previewMode={documentPreviewMode}
                 docWebcamRef={docWebcamRef}
                 docVideoConstraints={docVideoConstraints}

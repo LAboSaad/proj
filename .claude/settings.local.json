@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(rm \"c:/Users/layla.abosaad/OneDrive - Africell/Desktop/proj/proj/src/lib/services/ai-extraction.service.ts\")",
+      "Bash(rm \"c:/Users/layla.abosaad/OneDrive - Africell/Desktop/proj/proj/src/lib/loadmodels.ts\")"
     ]
   }
 }

@@ -117,7 +117,7 @@ export function transformToBackendPayload(
   // Read language from i18next localStorage key, fallback to "EN"
   const rawLang = localStorage.getItem("i18nextLng") ?? "EN";
   const language = rawLang.split("-")[0].toUpperCase();
-  console.log("payload", payload);
+console.log("payload", payload)
   return {
     FirstName: payload.ocr.FirstName || "",
     MiddleName: payload.ocr.MiddleName || "",
