@@ -4,6 +4,7 @@ import Webcam from "react-webcam";
 import type { DocumentQuality } from "../../../types/kyc";
 import { cx } from "../../../lib/utils";
 import { DocumentSide } from "./DocumentSide";
+import passportSample from "../../../assets/passport-sample.png";
 
 // ── Document type options ─────────────────────────────────────────────────────
 
@@ -131,6 +132,38 @@ export default function DocumentStep({
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             {selectedDoc.hint}
+          </div>
+        )}
+
+        {/* Passport capture guide */}
+        {docType === "passport" && (
+          <div className="mt-4 rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-700">
+              <p className="text-sm font-medium text-slate-200">How to capture your passport</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4 p-4">
+              <img
+                src={passportSample}
+                alt="Passport sample"
+                className="w-full sm:w-56 rounded-xl object-contain border border-slate-700 bg-slate-800"
+              />
+              <ol className="flex flex-col gap-2 text-sm text-slate-300 list-none">
+                {[
+                  "Open your passport to the photo/data page.",
+                  "Place it flat on a well-lit, dark surface.",
+                  "Make sure all four corners of the page are visible.",
+                  "Ensure the MRZ (two lines of text at the bottom) is fully readable.",
+                  "Avoid glare, shadows, or any part of the page being covered.",
+                ].map((step, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-400 font-semibold text-xs mt-0.5">
+                      {i + 1}
+                    </span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+            </div>
           </div>
         )}
 

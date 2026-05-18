@@ -59,7 +59,7 @@ export function useDocument({
   const [documentQuality,     setDocumentQuality]     = useState<DocumentQuality | null>(null);
   const [documentBackImage,   setDocumentBackImage]   = useState("");
   const [documentBackQuality, setDocumentBackQuality] = useState<DocumentQuality | null>(null);
-  const [documentPreviewMode, setDocumentPreviewMode] = useState<"camera" | "upload">("camera");
+  const [documentPreviewMode, setDocumentPreviewMode] = useState<"camera" | "upload">("upload");
 
   // ── Setters by side ───────────────────────────────────────────────────────
   // Keyed helpers so the shared logic below doesn't need separate branches.

@@ -160,6 +160,6 @@ console.log("payload", payload)
 
     IdDocFontPhoto_b64: payload.images.IdDocFontPhoto_b64 || "",
     IdDocRearPhoto_b64: payload.images.IdDocRearPhoto_b64 || "",
-    SignaturePhoto_b64: payload.signatureImage || "",
+    SignaturePhotoAttId64: payload.signatureImage || "",
   };
 }
