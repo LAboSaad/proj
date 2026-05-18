@@ -36,13 +36,6 @@ i18n
         },
       },
 
-      ar: {
-        translation: {
-          consent_title: "الموافقة وإشعار الخصوصية",
-          continue: "متابعة",
-          back: "رجوع",
-        },
-      },
     },
   });
 

@@ -5,7 +5,6 @@ import type { SessionTimers } from "../../hooks/useSessionTimers";
 const languages = [
   { code: "en", label: "English" },
   { code: "fr", label: "Français" },
-  { code: "ar", label: "العربية" },
 ];
 
 interface Props {
@@ -18,14 +17,12 @@ export function LanguageSwitcher({ timers }: Props) {
   useEffect(() => {
     const current = i18n.language || "en";
     setLang(current);
-    document.dir = current === "ar" ? "rtl" : "ltr";
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedLang = e.target.value;
     setLang(selectedLang);
     i18n.changeLanguage(selectedLang);
-    document.dir = selectedLang === "ar" ? "rtl" : "ltr";
   };
 
   return (
